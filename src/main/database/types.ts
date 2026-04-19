@@ -42,6 +42,16 @@ export interface UsageLog {
   app_name: string | null;
   tags: string | null;
   source: string;
+  is_estimated: boolean;
+  estimation_source: string | null;
+  pricing_source: string | null;
+  cached_read_tokens: number;
+  cached_write_tokens: number;
+  image_tokens: number;
+  audio_tokens: number;
+  reasoning_tokens: number;
+  image_count: number;
+  estimated_request_count: number;
   requested_at: string;
   completed_at: string | null;
   created_at: string;
@@ -61,6 +71,13 @@ export interface DailySummary {
   total_cost: number;
   error_count: number;
   avg_duration_ms: number;
+  estimated_request_count: number;
+  cached_read_tokens: number;
+  cached_write_tokens: number;
+  image_tokens: number;
+  audio_tokens: number;
+  reasoning_tokens: number;
+  image_count: number;
 }
 
 export interface WeeklySummary {
@@ -77,6 +94,13 @@ export interface WeeklySummary {
   total_cost: number;
   error_count: number;
   avg_duration_ms: number;
+  estimated_request_count: number;
+  cached_read_tokens: number;
+  cached_write_tokens: number;
+  image_tokens: number;
+  audio_tokens: number;
+  reasoning_tokens: number;
+  image_count: number;
 }
 
 export interface SettingsRecord {
@@ -127,6 +151,16 @@ export interface InsertUsageLogInput {
   app_name?: string | null;
   tags?: string | null;
   source?: string;
+  is_estimated?: boolean;
+  estimation_source?: string | null;
+  pricing_source?: string | null;
+  cached_read_tokens?: number;
+  cached_write_tokens?: number;
+  image_tokens?: number;
+  audio_tokens?: number;
+  reasoning_tokens?: number;
+  image_count?: number;
+  estimated_request_count?: number;
   requested_at: string;
   completed_at?: string | null;
 }
@@ -141,6 +175,13 @@ export interface UpsertSummaryInput {
   total_cost: number;
   error_count?: number;
   avg_duration_ms?: number;
+  estimated_request_count?: number;
+  cached_read_tokens?: number;
+  cached_write_tokens?: number;
+  image_tokens?: number;
+  audio_tokens?: number;
+  reasoning_tokens?: number;
+  image_count?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,6 +196,13 @@ export interface AggregateTotal {
   output_cost: number;
   total_cost: number;
   request_count: number;
+  estimated_request_count: number;
+  cached_read_tokens: number;
+  cached_write_tokens: number;
+  image_tokens: number;
+  audio_tokens: number;
+  reasoning_tokens: number;
+  image_count: number;
 }
 
 export interface ModelBreakdown {

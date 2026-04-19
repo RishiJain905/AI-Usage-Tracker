@@ -14,9 +14,11 @@ export interface Migration {
 
 // Import all migrations in order
 import { migration001 } from "./001-initial-schema";
+import { migration002 } from "./002-task-5-usage-metadata";
 
 const ALL_MIGRATIONS: Migration[] = [
   migration001,
+  migration002,
   // Future migrations: add here in order
 ];
 

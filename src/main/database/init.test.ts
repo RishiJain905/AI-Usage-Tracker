@@ -100,9 +100,9 @@ describe("initDatabase", () => {
     const providers = db
       .prepare("SELECT COUNT(*) AS cnt FROM providers")
       .get() as { cnt: number };
-    const models = db
-      .prepare("SELECT COUNT(*) AS cnt FROM models")
-      .get() as { cnt: number };
+    const models = db.prepare("SELECT COUNT(*) AS cnt FROM models").get() as {
+      cnt: number;
+    };
 
     expect(providers.cnt).toBe(SEED_PROVIDERS.length);
     expect(models.cnt).toBe(SEED_MODELS.length);
@@ -125,7 +125,7 @@ describe("initDatabase", () => {
     const migrations = db
       .prepare("SELECT COUNT(*) AS cnt FROM migrations")
       .get() as { cnt: number };
-    expect(migrations.cnt).toBe(1); // Only v1
+    expect(migrations.cnt).toBe(2); // v1 + v2
   });
 });
 

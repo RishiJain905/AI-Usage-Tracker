@@ -78,6 +78,13 @@ function emptyAggregate(): AggregateTotal {
     output_cost: 0,
     total_cost: 0,
     request_count: 0,
+    estimated_request_count: 0,
+    cached_read_tokens: 0,
+    cached_write_tokens: 0,
+    image_tokens: 0,
+    audio_tokens: 0,
+    reasoning_tokens: 0,
+    image_count: 0,
   };
 }
 
@@ -94,6 +101,13 @@ function rowToAggregate(
     output_cost: Number(row.output_cost ?? 0),
     total_cost: Number(row.total_cost ?? 0),
     request_count: Number(row.request_count ?? 0),
+    estimated_request_count: Number(row.estimated_request_count ?? 0),
+    cached_read_tokens: Number(row.cached_read_tokens ?? 0),
+    cached_write_tokens: Number(row.cached_write_tokens ?? 0),
+    image_tokens: Number(row.image_tokens ?? 0),
+    audio_tokens: Number(row.audio_tokens ?? 0),
+    reasoning_tokens: Number(row.reasoning_tokens ?? 0),
+    image_count: Number(row.image_count ?? 0),
   };
 }
 
@@ -149,13 +163,17 @@ export class UsageRepository {
         prompt_tokens, completion_tokens, total_tokens,
         input_cost, output_cost, total_cost,
         request_duration_ms, is_streaming, is_error, error_message,
-        app_name, tags, source, requested_at, completed_at, created_at
+        app_name, tags, source, is_estimated, estimation_source,
+        pricing_source, cached_read_tokens, cached_write_tokens,
+        image_tokens, audio_tokens, reasoning_tokens, image_count,
+        estimated_request_count, requested_at, completed_at, created_at
       ) VALUES (
         ?, ?, ?, ?, ?,
         ?, ?, ?,
         ?, ?, ?,
         ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       )
     `);
 
@@ -268,7 +286,14 @@ export class UsageRepository {
         SUM(input_cost)        AS input_cost,
         SUM(output_cost)       AS output_cost,
         SUM(total_cost)        AS total_cost,
-        SUM(request_count)     AS request_count
+        SUM(request_count)     AS request_count,
+        SUM(estimated_request_count) AS estimated_request_count,
+        SUM(cached_read_tokens) AS cached_read_tokens,
+        SUM(cached_write_tokens) AS cached_write_tokens,
+        SUM(image_tokens) AS image_tokens,
+        SUM(audio_tokens) AS audio_tokens,
+        SUM(reasoning_tokens) AS reasoning_tokens,
+        SUM(image_count) AS image_count
       FROM daily_summary
       WHERE date >= ? AND date <= ?
     `);
@@ -281,7 +306,14 @@ export class UsageRepository {
         SUM(input_cost)        AS input_cost,
         SUM(output_cost)       AS output_cost,
         SUM(total_cost)        AS total_cost,
-        SUM(request_count)     AS request_count
+        SUM(request_count)     AS request_count,
+        SUM(estimated_request_count) AS estimated_request_count,
+        SUM(cached_read_tokens) AS cached_read_tokens,
+        SUM(cached_write_tokens) AS cached_write_tokens,
+        SUM(image_tokens) AS image_tokens,
+        SUM(audio_tokens) AS audio_tokens,
+        SUM(reasoning_tokens) AS reasoning_tokens,
+        SUM(image_count) AS image_count
       FROM daily_summary
       WHERE date = ?
     `);
@@ -294,7 +326,14 @@ export class UsageRepository {
         SUM(input_cost)        AS input_cost,
         SUM(output_cost)       AS output_cost,
         SUM(total_cost)        AS total_cost,
-        SUM(request_count)     AS request_count
+        SUM(request_count)     AS request_count,
+        SUM(estimated_request_count) AS estimated_request_count,
+        SUM(cached_read_tokens) AS cached_read_tokens,
+        SUM(cached_write_tokens) AS cached_write_tokens,
+        SUM(image_tokens) AS image_tokens,
+        SUM(audio_tokens) AS audio_tokens,
+        SUM(reasoning_tokens) AS reasoning_tokens,
+        SUM(image_count) AS image_count
       FROM weekly_summary
       WHERE week_start = ?
     `);
@@ -307,7 +346,14 @@ export class UsageRepository {
         SUM(input_cost)        AS input_cost,
         SUM(output_cost)       AS output_cost,
         SUM(total_cost)        AS total_cost,
-        SUM(request_count)     AS request_count
+        SUM(request_count)     AS request_count,
+        SUM(estimated_request_count) AS estimated_request_count,
+        SUM(cached_read_tokens) AS cached_read_tokens,
+        SUM(cached_write_tokens) AS cached_write_tokens,
+        SUM(image_tokens) AS image_tokens,
+        SUM(audio_tokens) AS audio_tokens,
+        SUM(reasoning_tokens) AS reasoning_tokens,
+        SUM(image_count) AS image_count
       FROM daily_summary
     `);
 
@@ -421,7 +467,9 @@ export class UsageRepository {
     // -- Upsert helpers --------------------------------------------------------
     this.stmts.upsertDailyExisting = db.prepare(`
       SELECT id, request_count, prompt_tokens, completion_tokens, total_tokens,
-             input_cost, output_cost, total_cost, error_count, avg_duration_ms
+             input_cost, output_cost, total_cost, error_count, avg_duration_ms,
+             estimated_request_count, cached_read_tokens, cached_write_tokens,
+             image_tokens, audio_tokens, reasoning_tokens, image_count
       FROM daily_summary
       WHERE date = ? AND provider_id = ? AND model_id = ?
     `);
@@ -430,8 +478,10 @@ export class UsageRepository {
       INSERT INTO daily_summary (
         id, date, provider_id, model_id,
         request_count, prompt_tokens, completion_tokens, total_tokens,
-        input_cost, output_cost, total_cost, error_count, avg_duration_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        input_cost, output_cost, total_cost, error_count, avg_duration_ms,
+        estimated_request_count, cached_read_tokens, cached_write_tokens,
+        image_tokens, audio_tokens, reasoning_tokens, image_count
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.stmts.upsertDailyUpdate = db.prepare(`
@@ -444,13 +494,22 @@ export class UsageRepository {
         output_cost = ?,
         total_cost = ?,
         error_count = ?,
-        avg_duration_ms = ?
+        avg_duration_ms = ?,
+        estimated_request_count = ?,
+        cached_read_tokens = ?,
+        cached_write_tokens = ?,
+        image_tokens = ?,
+        audio_tokens = ?,
+        reasoning_tokens = ?,
+        image_count = ?
       WHERE id = ?
     `);
 
     this.stmts.upsertWeeklyExisting = db.prepare(`
       SELECT id, request_count, prompt_tokens, completion_tokens, total_tokens,
-             input_cost, output_cost, total_cost, error_count, avg_duration_ms
+             input_cost, output_cost, total_cost, error_count, avg_duration_ms,
+             estimated_request_count, cached_read_tokens, cached_write_tokens,
+             image_tokens, audio_tokens, reasoning_tokens, image_count
       FROM weekly_summary
       WHERE week_start = ? AND provider_id = ? AND model_id = ?
     `);
@@ -459,8 +518,10 @@ export class UsageRepository {
       INSERT INTO weekly_summary (
         id, week_start, provider_id, model_id,
         request_count, prompt_tokens, completion_tokens, total_tokens,
-        input_cost, output_cost, total_cost, error_count, avg_duration_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        input_cost, output_cost, total_cost, error_count, avg_duration_ms,
+        estimated_request_count, cached_read_tokens, cached_write_tokens,
+        image_tokens, audio_tokens, reasoning_tokens, image_count
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.stmts.upsertWeeklyUpdate = db.prepare(`
@@ -473,7 +534,14 @@ export class UsageRepository {
         output_cost = ?,
         total_cost = ?,
         error_count = ?,
-        avg_duration_ms = ?
+        avg_duration_ms = ?,
+        estimated_request_count = ?,
+        cached_read_tokens = ?,
+        cached_write_tokens = ?,
+        image_tokens = ?,
+        audio_tokens = ?,
+        reasoning_tokens = ?,
+        image_count = ?
       WHERE id = ?
     `);
   }
@@ -505,6 +573,16 @@ export class UsageRepository {
       log.app_name ?? null,
       log.tags ?? null,
       log.source ?? "proxy",
+      log.is_estimated ? 1 : 0,
+      log.estimation_source ?? null,
+      log.pricing_source ?? null,
+      log.cached_read_tokens ?? 0,
+      log.cached_write_tokens ?? 0,
+      log.image_tokens ?? 0,
+      log.audio_tokens ?? 0,
+      log.reasoning_tokens ?? 0,
+      log.image_count ?? 0,
+      log.estimated_request_count ?? 0,
       log.requested_at,
       log.completed_at ?? null,
       createdAt,
@@ -529,6 +607,16 @@ export class UsageRepository {
       app_name: log.app_name ?? null,
       tags: log.tags ?? null,
       source: log.source ?? "proxy",
+      is_estimated: log.is_estimated ?? false,
+      estimation_source: log.estimation_source ?? null,
+      pricing_source: log.pricing_source ?? null,
+      cached_read_tokens: log.cached_read_tokens ?? 0,
+      cached_write_tokens: log.cached_write_tokens ?? 0,
+      image_tokens: log.image_tokens ?? 0,
+      audio_tokens: log.audio_tokens ?? 0,
+      reasoning_tokens: log.reasoning_tokens ?? 0,
+      image_count: log.image_count ?? 0,
+      estimated_request_count: log.estimated_request_count ?? 0,
       requested_at: log.requested_at,
       completed_at: log.completed_at ?? null,
       created_at: createdAt,
@@ -571,6 +659,14 @@ export class UsageRepository {
         Number(existing.total_cost) + data.total_cost,
         Number(existing.error_count) + (data.error_count ?? 0),
         newAvgDuration,
+        Number(existing.estimated_request_count) +
+          (data.estimated_request_count ?? 0),
+        Number(existing.cached_read_tokens) + (data.cached_read_tokens ?? 0),
+        Number(existing.cached_write_tokens) + (data.cached_write_tokens ?? 0),
+        Number(existing.image_tokens) + (data.image_tokens ?? 0),
+        Number(existing.audio_tokens) + (data.audio_tokens ?? 0),
+        Number(existing.reasoning_tokens) + (data.reasoning_tokens ?? 0),
+        Number(existing.image_count) + (data.image_count ?? 0),
         existingId,
       );
     } else {
@@ -588,6 +684,13 @@ export class UsageRepository {
         data.total_cost,
         data.error_count ?? 0,
         data.avg_duration_ms ?? 0,
+        data.estimated_request_count ?? 0,
+        data.cached_read_tokens ?? 0,
+        data.cached_write_tokens ?? 0,
+        data.image_tokens ?? 0,
+        data.audio_tokens ?? 0,
+        data.reasoning_tokens ?? 0,
+        data.image_count ?? 0,
       );
     }
   }
@@ -627,6 +730,14 @@ export class UsageRepository {
         Number(existing.total_cost) + data.total_cost,
         Number(existing.error_count) + (data.error_count ?? 0),
         newAvgDuration,
+        Number(existing.estimated_request_count) +
+          (data.estimated_request_count ?? 0),
+        Number(existing.cached_read_tokens) + (data.cached_read_tokens ?? 0),
+        Number(existing.cached_write_tokens) + (data.cached_write_tokens ?? 0),
+        Number(existing.image_tokens) + (data.image_tokens ?? 0),
+        Number(existing.audio_tokens) + (data.audio_tokens ?? 0),
+        Number(existing.reasoning_tokens) + (data.reasoning_tokens ?? 0),
+        Number(existing.image_count) + (data.image_count ?? 0),
         existingId,
       );
     } else {
@@ -644,6 +755,13 @@ export class UsageRepository {
         data.total_cost,
         data.error_count ?? 0,
         data.avg_duration_ms ?? 0,
+        data.estimated_request_count ?? 0,
+        data.cached_read_tokens ?? 0,
+        data.cached_write_tokens ?? 0,
+        data.image_tokens ?? 0,
+        data.audio_tokens ?? 0,
+        data.reasoning_tokens ?? 0,
+        data.image_count ?? 0,
       );
     }
   }

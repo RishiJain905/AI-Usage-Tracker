@@ -26,6 +26,59 @@ export interface TokenUsage {
   totalTokens: number;
   modelId: string;
   providerId: string;
+  cachedReadTokens?: number;
+  cachedWriteTokens?: number;
+  imageTokens?: number;
+  audioTokens?: number;
+  reasoningTokens?: number;
+  imageCount?: number;
+  isEstimated?: boolean;
+  estimationSource?: TokenEstimationSource | null;
+}
+
+export type TokenEstimationSource =
+  | "chat-messages"
+  | "request-text"
+  | "response-text"
+  | "request-response-text"
+  | "stream-text"
+  | "image-count";
+
+export function createTokenUsage(
+  usage: Pick<
+    TokenUsage,
+    | "promptTokens"
+    | "completionTokens"
+    | "totalTokens"
+    | "modelId"
+    | "providerId"
+  > &
+    Partial<
+      Omit<
+        TokenUsage,
+        | "promptTokens"
+        | "completionTokens"
+        | "totalTokens"
+        | "modelId"
+        | "providerId"
+      >
+    >,
+): TokenUsage {
+  return {
+    promptTokens: usage.promptTokens,
+    completionTokens: usage.completionTokens,
+    totalTokens: usage.totalTokens,
+    modelId: usage.modelId,
+    providerId: usage.providerId,
+    cachedReadTokens: usage.cachedReadTokens ?? 0,
+    cachedWriteTokens: usage.cachedWriteTokens ?? 0,
+    imageTokens: usage.imageTokens ?? 0,
+    audioTokens: usage.audioTokens ?? 0,
+    reasoningTokens: usage.reasoningTokens ?? 0,
+    imageCount: usage.imageCount ?? 0,
+    isEstimated: usage.isEstimated ?? false,
+    estimationSource: usage.estimationSource ?? null,
+  };
 }
 
 export type ProxyEventType =

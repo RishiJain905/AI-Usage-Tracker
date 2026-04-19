@@ -84,7 +84,9 @@ describe("Migrations", () => {
       runMigrations(db);
 
       const row = db
-        .prepare("SELECT version, description FROM migrations WHERE version = 1")
+        .prepare(
+          "SELECT version, description FROM migrations WHERE version = 1",
+        )
         .get() as { version: number; description: string } | undefined;
 
       expect(row).toBeDefined();
@@ -99,7 +101,7 @@ describe("Migrations", () => {
       const rows = db
         .prepare("SELECT COUNT(*) AS cnt FROM migrations")
         .get() as { cnt: number };
-      expect(rows.cnt).toBe(1);
+      expect(rows.cnt).toBe(2);
     });
 
     it("should not fail when there are no pending migrations", () => {
@@ -123,7 +125,7 @@ describe("Migrations", () => {
     it("should return applied versions after running migrations", () => {
       runMigrations(db);
       const versions = getAppliedVersions(db);
-      expect(versions).toEqual([1]);
+      expect(versions).toEqual([1, 2]);
     });
   });
 
@@ -189,6 +191,56 @@ describe("Migrations", () => {
       }>;
       const uniqueIndex = indexes.find((idx) => idx.unique === 1);
       expect(uniqueIndex).toBeDefined();
+    });
+  });
+
+  describe("Task 5 schema migration", () => {
+    it("should add normalized Task 5 columns to usage_logs", () => {
+      runMigrations(db);
+
+      const info = db.pragma("table_info(usage_logs)") as Array<{
+        name: string;
+      }>;
+      const columnNames = info.map((column) => column.name);
+
+      expect(columnNames).toContain("is_estimated");
+      expect(columnNames).toContain("estimation_source");
+      expect(columnNames).toContain("pricing_source");
+      expect(columnNames).toContain("cached_read_tokens");
+      expect(columnNames).toContain("cached_write_tokens");
+      expect(columnNames).toContain("image_tokens");
+      expect(columnNames).toContain("audio_tokens");
+      expect(columnNames).toContain("reasoning_tokens");
+      expect(columnNames).toContain("image_count");
+      expect(columnNames).toContain("estimated_request_count");
+    });
+
+    it("should add additive Task 5 columns to daily_summary and weekly_summary", () => {
+      runMigrations(db);
+
+      const dailyInfo = db.pragma("table_info(daily_summary)") as Array<{
+        name: string;
+      }>;
+      const weeklyInfo = db.pragma("table_info(weekly_summary)") as Array<{
+        name: string;
+      }>;
+      const expectedColumns = [
+        "estimated_request_count",
+        "cached_read_tokens",
+        "cached_write_tokens",
+        "image_tokens",
+        "audio_tokens",
+        "reasoning_tokens",
+        "image_count",
+      ];
+
+      const dailyColumns = dailyInfo.map((column) => column.name);
+      const weeklyColumns = weeklyInfo.map((column) => column.name);
+
+      for (const column of expectedColumns) {
+        expect(dailyColumns).toContain(column);
+        expect(weeklyColumns).toContain(column);
+      }
     });
   });
 

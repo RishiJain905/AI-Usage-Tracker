@@ -10,9 +10,7 @@
  */
 
 import { TokenUsage } from "./types";
-import { providerRegistry } from "./providers";
-import type { Provider } from "./providers/base";
-import { UnknownProvider } from "./providers/unknown";
+import { TokenExtractor } from "./token-extractor";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,8 +62,10 @@ export function createStreamingHandler(
   provider: string,
   model: string,
   writeCallback: (chunk: Buffer) => void,
+  requestBody?: unknown,
 ): StreamingHandler {
   const accumulatedChunks: Buffer[] = [];
+  const extractor = new TokenExtractor();
 
   return {
     processChunk(chunk: Buffer): void {
@@ -77,77 +77,15 @@ export function createStreamingHandler(
 
     finish(): StreamResult {
       const fullBody = Buffer.concat(accumulatedChunks).toString("utf-8");
-      const usage = extractStreamUsage(provider, model, fullBody);
+      const usage = extractor.extractStream({
+        providerId: provider,
+        modelId: model,
+        requestBody,
+        body: fullBody,
+      });
       return { body: fullBody, usage };
     },
   };
-}
-
-// ---------------------------------------------------------------------------
-// Usage extraction — dispatch by provider
-// ---------------------------------------------------------------------------
-
-/**
- * Parse the full SSE body text into individual data lines.
- * Filters out comments, empty lines, and the terminal [DONE] marker.
- */
-function parseSSELines(body: string): string[] {
-  const lines: string[] = [];
-  for (const line of body.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith(":")) continue; // blank / comment
-    if (trimmed.startsWith("data: ")) {
-      const payload = trimmed.slice(6).trim();
-      if (payload === "[DONE]") continue;
-      lines.push(payload);
-    } else if (trimmed.startsWith("data:")) {
-      const payload = trimmed.slice(5).trim();
-      if (payload === "[DONE]") continue;
-      lines.push(payload);
-    }
-  }
-  return lines;
-}
-
-const unknownProvider = new UnknownProvider();
-
-/**
- * Extract stream usage using the provider registry.
- *
- * Looks up the registered provider by ID. If found, delegates extraction
- * to that provider's extractUsageFromChunks() method. Falls back to
- * UnknownProvider which tries multiple formats.
- */
-function extractStreamUsage(
-  provider: string,
-  model: string,
-  body: string,
-): TokenUsage | null {
-  const chunks = parseSSELines(body);
-  if (chunks.length === 0) return null;
-
-  const providerImpl: Provider | undefined = providerRegistry.get(provider);
-  if (providerImpl) {
-    const usage = providerImpl.extractUsageFromChunks(chunks);
-    if (usage) return usage;
-  }
-
-  // Fallback: try unknown provider for unrecognized formats
-  const fallbackUsage = unknownProvider.extractUsageFromChunks(chunks);
-  if (fallbackUsage) {
-    // Override with the actual provider and model from the route
-    return {
-      ...fallbackUsage,
-      modelId: model || fallbackUsage.modelId,
-      providerId: provider,
-    };
-  }
-
-  // Last resort: try the legacy OpenAI/Anthropic extractors
-  return (
-    extractOpenAIStreamUsage(chunks, model, provider) ??
-    extractAnthropicStreamUsage(chunks, model, provider)
-  );
 }
 
 // ---------------------------------------------------------------------------

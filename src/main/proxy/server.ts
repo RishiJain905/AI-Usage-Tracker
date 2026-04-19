@@ -531,6 +531,7 @@ export class ProxyServer {
         // Write each chunk to the client as it arrives — real-time streaming
         clientRes.write(chunk);
       },
+      proxyRequest.body,
     );
 
     upstreamRes.on("data", (chunk: Buffer) => {

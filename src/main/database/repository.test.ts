@@ -34,7 +34,9 @@ function createTestDb(): { db: Database.Database; repo: UsageRepository } {
 // Helper: build a minimal InsertUsageLogInput
 // ---------------------------------------------------------------------------
 
-function makeLogInput(overrides: Partial<InsertUsageLogInput> = {}): InsertUsageLogInput {
+function makeLogInput(
+  overrides: Partial<InsertUsageLogInput> = {},
+): InsertUsageLogInput {
   return {
     provider_id: "openai",
     model_id: "gpt-4o",
@@ -52,7 +54,9 @@ function makeLogInput(overrides: Partial<InsertUsageLogInput> = {}): InsertUsage
   };
 }
 
-function makeSummaryInput(overrides: Partial<UpsertSummaryInput> = {}): UpsertSummaryInput {
+function makeSummaryInput(
+  overrides: Partial<UpsertSummaryInput> = {},
+): UpsertSummaryInput {
   return {
     request_count: 1,
     prompt_tokens: 100,
@@ -88,7 +92,10 @@ describe("getPeriodDates", () => {
   it("should return week range for 'week'", () => {
     const { start, end } = getPeriodDates("week");
     const now = new Date();
-    const expectedStart = format(startOfWeek(now, { weekStartsOn: 1 }), "yyyy-MM-dd");
+    const expectedStart = format(
+      startOfWeek(now, { weekStartsOn: 1 }),
+      "yyyy-MM-dd",
+    );
     expect(start).toBe(expectedStart);
     // End should be >= start
     expect(end >= start).toBe(true);
@@ -196,6 +203,48 @@ describe("UsageRepository", () => {
       expect(result.is_error).toBe(true);
       expect(result.error_message).toBe("Rate limit exceeded");
     });
+
+    it("should persist normalized Task 5 usage metadata", () => {
+      const input = Object.assign(makeLogInput(), {
+        is_estimated: true,
+        estimation_source: "char-count",
+        pricing_source: "default",
+        cached_read_tokens: 40,
+        cached_write_tokens: 10,
+        image_tokens: 768,
+        audio_tokens: 120,
+        reasoning_tokens: 32,
+        image_count: 2,
+        estimated_request_count: 1,
+      }) as InsertUsageLogInput;
+
+      const result = repo.insertUsageLog(input);
+      const row = db
+        .prepare("SELECT * FROM usage_logs WHERE id = ?")
+        .get(result.id) as Record<string, unknown>;
+
+      expect(result.is_estimated).toBe(true);
+      expect(result.estimation_source).toBe("char-count");
+      expect(result.pricing_source).toBe("default");
+      expect(result.cached_read_tokens).toBe(40);
+      expect(result.cached_write_tokens).toBe(10);
+      expect(result.image_tokens).toBe(768);
+      expect(result.audio_tokens).toBe(120);
+      expect(result.reasoning_tokens).toBe(32);
+      expect(result.image_count).toBe(2);
+      expect(result.estimated_request_count).toBe(1);
+
+      expect(row.is_estimated).toBe(1);
+      expect(row.estimation_source).toBe("char-count");
+      expect(row.pricing_source).toBe("default");
+      expect(row.cached_read_tokens).toBe(40);
+      expect(row.cached_write_tokens).toBe(10);
+      expect(row.image_tokens).toBe(768);
+      expect(row.audio_tokens).toBe(120);
+      expect(row.reasoning_tokens).toBe(32);
+      expect(row.image_count).toBe(2);
+      expect(row.estimated_request_count).toBe(1);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -208,7 +257,9 @@ describe("UsageRepository", () => {
       repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", data);
 
       const row = db
-        .prepare("SELECT * FROM daily_summary WHERE date = ? AND provider_id = ? AND model_id = ?")
+        .prepare(
+          "SELECT * FROM daily_summary WHERE date = ? AND provider_id = ? AND model_id = ?",
+        )
         .get("2026-04-19", "openai", "gpt-4o") as any;
 
       expect(row).toBeDefined();
@@ -220,14 +271,24 @@ describe("UsageRepository", () => {
     });
 
     it("should update (add values) on upsert — not replace", () => {
-      const data1 = makeSummaryInput({ request_count: 3, total_tokens: 300, total_cost: 1.0 });
+      const data1 = makeSummaryInput({
+        request_count: 3,
+        total_tokens: 300,
+        total_cost: 1.0,
+      });
       repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", data1);
 
-      const data2 = makeSummaryInput({ request_count: 2, total_tokens: 200, total_cost: 0.5 });
+      const data2 = makeSummaryInput({
+        request_count: 2,
+        total_tokens: 200,
+        total_cost: 0.5,
+      });
       repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", data2);
 
       const row = db
-        .prepare("SELECT * FROM daily_summary WHERE date = ? AND provider_id = ? AND model_id = ?")
+        .prepare(
+          "SELECT * FROM daily_summary WHERE date = ? AND provider_id = ? AND model_id = ?",
+        )
         .get("2026-04-19", "openai", "gpt-4o") as any;
 
       expect(row.request_count).toBe(5); // 3 + 2
@@ -236,14 +297,22 @@ describe("UsageRepository", () => {
     });
 
     it("should recalculate avg_duration_ms as weighted average on upsert", () => {
-      const data1 = makeSummaryInput({ request_count: 4, avg_duration_ms: 100 });
+      const data1 = makeSummaryInput({
+        request_count: 4,
+        avg_duration_ms: 100,
+      });
       repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", data1);
 
-      const data2 = makeSummaryInput({ request_count: 1, avg_duration_ms: 200 });
+      const data2 = makeSummaryInput({
+        request_count: 1,
+        avg_duration_ms: 200,
+      });
       repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", data2);
 
       const row = db
-        .prepare("SELECT avg_duration_ms FROM daily_summary WHERE date = ? AND provider_id = ? AND model_id = ?")
+        .prepare(
+          "SELECT avg_duration_ms FROM daily_summary WHERE date = ? AND provider_id = ? AND model_id = ?",
+        )
         .get("2026-04-19", "openai", "gpt-4o") as { avg_duration_ms: number };
 
       // Weighted avg: (100*4 + 200*1) / 5 = 120
@@ -258,10 +327,50 @@ describe("UsageRepository", () => {
       repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", data2);
 
       const row = db
-        .prepare("SELECT error_count FROM daily_summary WHERE date = ? AND provider_id = ? AND model_id = ?")
+        .prepare(
+          "SELECT error_count FROM daily_summary WHERE date = ? AND provider_id = ? AND model_id = ?",
+        )
         .get("2026-04-19", "openai", "gpt-4o") as { error_count: number };
 
       expect(row.error_count).toBe(5);
+    });
+
+    it("should accumulate Task 5 additive counters on upsert", () => {
+      const data1 = Object.assign(makeSummaryInput({ request_count: 2 }), {
+        estimated_request_count: 1,
+        cached_read_tokens: 40,
+        cached_write_tokens: 5,
+        image_tokens: 768,
+        audio_tokens: 30,
+        reasoning_tokens: 12,
+        image_count: 1,
+      }) as UpsertSummaryInput;
+      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", data1);
+
+      const data2 = Object.assign(makeSummaryInput({ request_count: 3 }), {
+        estimated_request_count: 2,
+        cached_read_tokens: 60,
+        cached_write_tokens: 7,
+        image_tokens: 1536,
+        audio_tokens: 50,
+        reasoning_tokens: 20,
+        image_count: 2,
+      }) as UpsertSummaryInput;
+      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", data2);
+
+      const row = db
+        .prepare(
+          "SELECT estimated_request_count, cached_read_tokens, cached_write_tokens, image_tokens, audio_tokens, reasoning_tokens, image_count FROM daily_summary WHERE date = ? AND provider_id = ? AND model_id = ?",
+        )
+        .get("2026-04-19", "openai", "gpt-4o") as Record<string, number>;
+
+      expect(row.estimated_request_count).toBe(3);
+      expect(row.cached_read_tokens).toBe(100);
+      expect(row.cached_write_tokens).toBe(12);
+      expect(row.image_tokens).toBe(2304);
+      expect(row.audio_tokens).toBe(80);
+      expect(row.reasoning_tokens).toBe(32);
+      expect(row.image_count).toBe(3);
     });
   });
 
@@ -275,7 +384,9 @@ describe("UsageRepository", () => {
       repo.upsertWeeklySummary("2026-04-13", "openai", "gpt-4o", data);
 
       const row = db
-        .prepare("SELECT * FROM weekly_summary WHERE week_start = ? AND provider_id = ? AND model_id = ?")
+        .prepare(
+          "SELECT * FROM weekly_summary WHERE week_start = ? AND provider_id = ? AND model_id = ?",
+        )
         .get("2026-04-13", "openai", "gpt-4o") as any;
 
       expect(row).toBeDefined();
@@ -284,14 +395,24 @@ describe("UsageRepository", () => {
     });
 
     it("should update (add values) on upsert", () => {
-      const data1 = makeSummaryInput({ request_count: 5, total_tokens: 500, total_cost: 2.0 });
+      const data1 = makeSummaryInput({
+        request_count: 5,
+        total_tokens: 500,
+        total_cost: 2.0,
+      });
       repo.upsertWeeklySummary("2026-04-13", "openai", "gpt-4o", data1);
 
-      const data2 = makeSummaryInput({ request_count: 3, total_tokens: 300, total_cost: 1.0 });
+      const data2 = makeSummaryInput({
+        request_count: 3,
+        total_tokens: 300,
+        total_cost: 1.0,
+      });
       repo.upsertWeeklySummary("2026-04-13", "openai", "gpt-4o", data2);
 
       const row = db
-        .prepare("SELECT * FROM weekly_summary WHERE week_start = ? AND provider_id = ? AND model_id = ?")
+        .prepare(
+          "SELECT * FROM weekly_summary WHERE week_start = ? AND provider_id = ? AND model_id = ?",
+        )
         .get("2026-04-13", "openai", "gpt-4o") as any;
 
       expect(row.request_count).toBe(8);
@@ -300,18 +421,64 @@ describe("UsageRepository", () => {
     });
 
     it("should recalculate avg_duration_ms as weighted average on upsert", () => {
-      const data1 = makeSummaryInput({ request_count: 2, avg_duration_ms: 300 });
+      const data1 = makeSummaryInput({
+        request_count: 2,
+        avg_duration_ms: 300,
+      });
       repo.upsertWeeklySummary("2026-04-13", "openai", "gpt-4o", data1);
 
-      const data2 = makeSummaryInput({ request_count: 3, avg_duration_ms: 500 });
+      const data2 = makeSummaryInput({
+        request_count: 3,
+        avg_duration_ms: 500,
+      });
       repo.upsertWeeklySummary("2026-04-13", "openai", "gpt-4o", data2);
 
       const row = db
-        .prepare("SELECT avg_duration_ms FROM weekly_summary WHERE week_start = ? AND provider_id = ? AND model_id = ?")
+        .prepare(
+          "SELECT avg_duration_ms FROM weekly_summary WHERE week_start = ? AND provider_id = ? AND model_id = ?",
+        )
         .get("2026-04-13", "openai", "gpt-4o") as { avg_duration_ms: number };
 
       // (300*2 + 500*3) / 5 = 420
       expect(row.avg_duration_ms).toBeCloseTo(420, 2);
+    });
+
+    it("should accumulate Task 5 additive counters on upsert", () => {
+      const data1 = Object.assign(makeSummaryInput({ request_count: 2 }), {
+        estimated_request_count: 1,
+        cached_read_tokens: 20,
+        cached_write_tokens: 4,
+        image_tokens: 512,
+        audio_tokens: 15,
+        reasoning_tokens: 8,
+        image_count: 1,
+      }) as UpsertSummaryInput;
+      repo.upsertWeeklySummary("2026-04-13", "openai", "gpt-4o", data1);
+
+      const data2 = Object.assign(makeSummaryInput({ request_count: 1 }), {
+        estimated_request_count: 1,
+        cached_read_tokens: 30,
+        cached_write_tokens: 6,
+        image_tokens: 256,
+        audio_tokens: 10,
+        reasoning_tokens: 5,
+        image_count: 2,
+      }) as UpsertSummaryInput;
+      repo.upsertWeeklySummary("2026-04-13", "openai", "gpt-4o", data2);
+
+      const row = db
+        .prepare(
+          "SELECT estimated_request_count, cached_read_tokens, cached_write_tokens, image_tokens, audio_tokens, reasoning_tokens, image_count FROM weekly_summary WHERE week_start = ? AND provider_id = ? AND model_id = ?",
+        )
+        .get("2026-04-13", "openai", "gpt-4o") as Record<string, number>;
+
+      expect(row.estimated_request_count).toBe(2);
+      expect(row.cached_read_tokens).toBe(50);
+      expect(row.cached_write_tokens).toBe(10);
+      expect(row.image_tokens).toBe(768);
+      expect(row.audio_tokens).toBe(25);
+      expect(row.reasoning_tokens).toBe(13);
+      expect(row.image_count).toBe(3);
     });
   });
 
@@ -321,21 +488,27 @@ describe("UsageRepository", () => {
 
   describe("getUsageLogs", () => {
     beforeEach(() => {
-      repo.insertUsageLog(makeLogInput({
-        provider_id: "openai",
-        model_id: "gpt-4o",
-        requested_at: "2026-04-19T10:00:00.000Z",
-      }));
-      repo.insertUsageLog(makeLogInput({
-        provider_id: "anthropic",
-        model_id: "claude-3.5-sonnet",
-        requested_at: "2026-04-18T10:00:00.000Z",
-      }));
-      repo.insertUsageLog(makeLogInput({
-        provider_id: "openai",
-        model_id: "gpt-4o-mini",
-        requested_at: "2026-04-17T10:00:00.000Z",
-      }));
+      repo.insertUsageLog(
+        makeLogInput({
+          provider_id: "openai",
+          model_id: "gpt-4o",
+          requested_at: "2026-04-19T10:00:00.000Z",
+        }),
+      );
+      repo.insertUsageLog(
+        makeLogInput({
+          provider_id: "anthropic",
+          model_id: "claude-3.5-sonnet",
+          requested_at: "2026-04-18T10:00:00.000Z",
+        }),
+      );
+      repo.insertUsageLog(
+        makeLogInput({
+          provider_id: "openai",
+          model_id: "gpt-4o-mini",
+          requested_at: "2026-04-17T10:00:00.000Z",
+        }),
+      );
     });
 
     it("should return all logs when no filters", () => {
@@ -398,16 +571,26 @@ describe("UsageRepository", () => {
       const today = format(new Date(), "yyyy-MM-dd");
 
       // Insert daily summaries for today
-      repo.upsertDailySummary(today, "openai", "gpt-4o", makeSummaryInput({
-        request_count: 5,
-        total_tokens: 500,
-        total_cost: 1.5,
-      }));
-      repo.upsertDailySummary(today, "anthropic", "claude-3.5-sonnet", makeSummaryInput({
-        request_count: 3,
-        total_tokens: 300,
-        total_cost: 2.0,
-      }));
+      repo.upsertDailySummary(
+        today,
+        "openai",
+        "gpt-4o",
+        makeSummaryInput({
+          request_count: 5,
+          total_tokens: 500,
+          total_cost: 1.5,
+        }),
+      );
+      repo.upsertDailySummary(
+        today,
+        "anthropic",
+        "claude-3.5-sonnet",
+        makeSummaryInput({
+          request_count: 3,
+          total_tokens: 300,
+          total_cost: 2.0,
+        }),
+      );
 
       const summary = repo.getUsageSummary("today");
 
@@ -420,11 +603,16 @@ describe("UsageRepository", () => {
     });
 
     it("should work with 'all' period", () => {
-      repo.upsertDailySummary("2026-01-01", "openai", "gpt-4o", makeSummaryInput({
-        request_count: 10,
-        total_tokens: 1000,
-        total_cost: 5.0,
-      }));
+      repo.upsertDailySummary(
+        "2026-01-01",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput({
+          request_count: 10,
+          total_tokens: 1000,
+          total_cost: 5.0,
+        }),
+      );
 
       const summary = repo.getUsageSummary("all");
       expect(summary.total_requests).toBe(10);
@@ -446,24 +634,34 @@ describe("UsageRepository", () => {
     });
 
     it("should sum across multiple providers and models", () => {
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", makeSummaryInput({
-        prompt_tokens: 100,
-        completion_tokens: 50,
-        total_tokens: 150,
-        input_cost: 0.25,
-        output_cost: 0.5,
-        total_cost: 0.75,
-        request_count: 5,
-      }));
-      repo.upsertDailySummary("2026-04-19", "anthropic", "claude-3.5-sonnet", makeSummaryInput({
-        prompt_tokens: 200,
-        completion_tokens: 100,
-        total_tokens: 300,
-        input_cost: 0.6,
-        output_cost: 1.5,
-        total_cost: 2.1,
-        request_count: 3,
-      }));
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput({
+          prompt_tokens: 100,
+          completion_tokens: 50,
+          total_tokens: 150,
+          input_cost: 0.25,
+          output_cost: 0.5,
+          total_cost: 0.75,
+          request_count: 5,
+        }),
+      );
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "anthropic",
+        "claude-3.5-sonnet",
+        makeSummaryInput({
+          prompt_tokens: 200,
+          completion_tokens: 100,
+          total_tokens: 300,
+          input_cost: 0.6,
+          output_cost: 1.5,
+          total_cost: 2.1,
+          request_count: 3,
+        }),
+      );
 
       const total = repo.getAggregateTotal("all");
       expect(total.prompt_tokens).toBe(300);
@@ -474,14 +672,60 @@ describe("UsageRepository", () => {
       expect(total.total_cost).toBeCloseTo(2.85, 4);
       expect(total.request_count).toBe(8);
     });
+
+    it("should include Task 5 additive counters in aggregate totals", () => {
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o",
+        Object.assign(makeSummaryInput(), {
+          estimated_request_count: 1,
+          cached_read_tokens: 40,
+          cached_write_tokens: 10,
+          image_tokens: 768,
+          audio_tokens: 20,
+          reasoning_tokens: 8,
+          image_count: 1,
+        }) as UpsertSummaryInput,
+      );
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "anthropic",
+        "claude-3.5-sonnet",
+        Object.assign(makeSummaryInput(), {
+          estimated_request_count: 2,
+          cached_read_tokens: 60,
+          cached_write_tokens: 5,
+          image_tokens: 512,
+          audio_tokens: 30,
+          reasoning_tokens: 12,
+          image_count: 2,
+        }) as UpsertSummaryInput,
+      );
+
+      const total = repo.getAggregateTotal("all");
+
+      expect(total.estimated_request_count).toBe(3);
+      expect(total.cached_read_tokens).toBe(100);
+      expect(total.cached_write_tokens).toBe(15);
+      expect(total.image_tokens).toBe(1280);
+      expect(total.audio_tokens).toBe(50);
+      expect(total.reasoning_tokens).toBe(20);
+      expect(total.image_count).toBe(3);
+    });
   });
 
   describe("getAggregateDailyTotal", () => {
     it("should return aggregate for a specific date", () => {
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", makeSummaryInput({
-        total_tokens: 100,
-        request_count: 2,
-      }));
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput({
+          total_tokens: 100,
+          request_count: 2,
+        }),
+      );
 
       const total = repo.getAggregateDailyTotal("2026-04-19");
       expect(total.total_tokens).toBe(100);
@@ -496,10 +740,15 @@ describe("UsageRepository", () => {
 
   describe("getAggregateWeeklyTotal", () => {
     it("should return aggregate for a specific week", () => {
-      repo.upsertWeeklySummary("2026-04-13", "openai", "gpt-4o", makeSummaryInput({
-        total_tokens: 500,
-        request_count: 10,
-      }));
+      repo.upsertWeeklySummary(
+        "2026-04-13",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput({
+          total_tokens: 500,
+          request_count: 10,
+        }),
+      );
 
       const total = repo.getAggregateWeeklyTotal("2026-04-13");
       expect(total.total_tokens).toBe(500);
@@ -509,14 +758,24 @@ describe("UsageRepository", () => {
 
   describe("getAggregateAllTimeTotal", () => {
     it("should sum all daily summaries", () => {
-      repo.upsertDailySummary("2026-01-01", "openai", "gpt-4o", makeSummaryInput({
-        total_tokens: 200,
-        request_count: 4,
-      }));
-      repo.upsertDailySummary("2026-03-15", "anthropic", "claude-3.5-sonnet", makeSummaryInput({
-        total_tokens: 300,
-        request_count: 6,
-      }));
+      repo.upsertDailySummary(
+        "2026-01-01",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput({
+          total_tokens: 200,
+          request_count: 4,
+        }),
+      );
+      repo.upsertDailySummary(
+        "2026-03-15",
+        "anthropic",
+        "claude-3.5-sonnet",
+        makeSummaryInput({
+          total_tokens: 300,
+          request_count: 6,
+        }),
+      );
 
       const total = repo.getAggregateAllTimeTotal();
       expect(total.total_tokens).toBe(500);
@@ -530,16 +789,26 @@ describe("UsageRepository", () => {
 
   describe("getModelBreakdownForPeriod", () => {
     it("should return per-model breakdown for a period", () => {
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", makeSummaryInput({
-        total_tokens: 500,
-        total_cost: 1.0,
-        request_count: 5,
-      }));
-      repo.upsertDailySummary("2026-04-19", "anthropic", "claude-3.5-sonnet", makeSummaryInput({
-        total_tokens: 300,
-        total_cost: 2.0,
-        request_count: 3,
-      }));
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput({
+          total_tokens: 500,
+          total_cost: 1.0,
+          request_count: 5,
+        }),
+      );
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "anthropic",
+        "claude-3.5-sonnet",
+        makeSummaryInput({
+          total_tokens: 300,
+          total_cost: 2.0,
+          request_count: 3,
+        }),
+      );
 
       const breakdown = repo.getModelBreakdownForPeriod("all");
 
@@ -565,14 +834,24 @@ describe("UsageRepository", () => {
 
   describe("getAllModelSummaries", () => {
     it("should return summaries for all models in a period", () => {
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", makeSummaryInput({
-        total_tokens: 400,
-        request_count: 4,
-      }));
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o-mini", makeSummaryInput({
-        total_tokens: 100,
-        request_count: 1,
-      }));
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput({
+          total_tokens: 400,
+          request_count: 4,
+        }),
+      );
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o-mini",
+        makeSummaryInput({
+          total_tokens: 100,
+          request_count: 1,
+        }),
+      );
 
       const summaries = repo.getAllModelSummaries("all");
 
@@ -589,31 +868,56 @@ describe("UsageRepository", () => {
 
   describe("getTopModels", () => {
     beforeEach(() => {
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", makeSummaryInput({
-        total_tokens: 1000,
-        total_cost: 5.0,
-        request_count: 10,
-      }));
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o-mini", makeSummaryInput({
-        total_tokens: 800,
-        total_cost: 1.0,
-        request_count: 8,
-      }));
-      repo.upsertDailySummary("2026-04-19", "anthropic", "claude-3.5-sonnet", makeSummaryInput({
-        total_tokens: 600,
-        total_cost: 3.0,
-        request_count: 6,
-      }));
-      repo.upsertDailySummary("2026-04-19", "anthropic", "claude-3-opus", makeSummaryInput({
-        total_tokens: 400,
-        total_cost: 10.0,
-        request_count: 4,
-      }));
-      repo.upsertDailySummary("2026-04-19", "gemini", "gemini-1.5-pro", makeSummaryInput({
-        total_tokens: 200,
-        total_cost: 0.5,
-        request_count: 2,
-      }));
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput({
+          total_tokens: 1000,
+          total_cost: 5.0,
+          request_count: 10,
+        }),
+      );
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o-mini",
+        makeSummaryInput({
+          total_tokens: 800,
+          total_cost: 1.0,
+          request_count: 8,
+        }),
+      );
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "anthropic",
+        "claude-3.5-sonnet",
+        makeSummaryInput({
+          total_tokens: 600,
+          total_cost: 3.0,
+          request_count: 6,
+        }),
+      );
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "anthropic",
+        "claude-3-opus",
+        makeSummaryInput({
+          total_tokens: 400,
+          total_cost: 10.0,
+          request_count: 4,
+        }),
+      );
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "gemini",
+        "gemini-1.5-pro",
+        makeSummaryInput({
+          total_tokens: 200,
+          total_cost: 0.5,
+          request_count: 2,
+        }),
+      );
     });
 
     it("should return top N models by total_tokens in descending order", () => {
@@ -645,10 +949,15 @@ describe("UsageRepository", () => {
 
       // Insert daily summaries for past 7 days
       for (let i = 0; i < 7; i++) {
-        repo.upsertDailySummary(dates[i], "openai", "gpt-4o", makeSummaryInput({
-          total_tokens: 100 * (i + 1),
-          request_count: i + 1,
-        }));
+        repo.upsertDailySummary(
+          dates[i],
+          "openai",
+          "gpt-4o",
+          makeSummaryInput({
+            total_tokens: 100 * (i + 1),
+            request_count: i + 1,
+          }),
+        );
       }
 
       const trend = repo.getUsageTrend(7);
@@ -675,10 +984,15 @@ describe("UsageRepository", () => {
       );
 
       for (let i = 0; i < 3; i++) {
-        repo.upsertWeeklySummary(weekStarts[i], "openai", "gpt-4o", makeSummaryInput({
-          total_tokens: 1000 * (i + 1),
-          request_count: 10 * (i + 1),
-        }));
+        repo.upsertWeeklySummary(
+          weekStarts[i],
+          "openai",
+          "gpt-4o",
+          makeSummaryInput({
+            total_tokens: 1000 * (i + 1),
+            request_count: 10 * (i + 1),
+          }),
+        );
       }
 
       const trend = repo.getWeeklyTrend(3);
@@ -696,9 +1010,24 @@ describe("UsageRepository", () => {
 
   describe("getTotalTokensByProvider", () => {
     it("should return total tokens grouped by provider", () => {
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", makeSummaryInput({ total_tokens: 500 }));
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o-mini", makeSummaryInput({ total_tokens: 300 }));
-      repo.upsertDailySummary("2026-04-19", "anthropic", "claude-3.5-sonnet", makeSummaryInput({ total_tokens: 400 }));
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput({ total_tokens: 500 }),
+      );
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o-mini",
+        makeSummaryInput({ total_tokens: 300 }),
+      );
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "anthropic",
+        "claude-3.5-sonnet",
+        makeSummaryInput({ total_tokens: 400 }),
+      );
 
       const result = repo.getTotalTokensByProvider("all");
 
@@ -709,8 +1038,18 @@ describe("UsageRepository", () => {
 
   describe("getTotalCostByProvider", () => {
     it("should return total cost grouped by provider", () => {
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", makeSummaryInput({ total_cost: 1.5 }));
-      repo.upsertDailySummary("2026-04-19", "anthropic", "claude-3.5-sonnet", makeSummaryInput({ total_cost: 3.0 }));
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput({ total_cost: 1.5 }),
+      );
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "anthropic",
+        "claude-3.5-sonnet",
+        makeSummaryInput({ total_cost: 3.0 }),
+      );
 
       const result = repo.getTotalCostByProvider("all");
 
@@ -725,8 +1064,18 @@ describe("UsageRepository", () => {
 
   describe("getTotalTokensByModel", () => {
     it("should return total tokens grouped by model", () => {
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", makeSummaryInput({ total_tokens: 500 }));
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o-mini", makeSummaryInput({ total_tokens: 200 }));
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput({ total_tokens: 500 }),
+      );
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o-mini",
+        makeSummaryInput({ total_tokens: 200 }),
+      );
 
       const result = repo.getTotalTokensByModel("all");
 
@@ -737,8 +1086,18 @@ describe("UsageRepository", () => {
 
   describe("getTotalCostByModel", () => {
     it("should return total cost grouped by model", () => {
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", makeSummaryInput({ total_cost: 2.5 }));
-      repo.upsertDailySummary("2026-04-19", "anthropic", "claude-3.5-sonnet", makeSummaryInput({ total_cost: 4.0 }));
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput({ total_cost: 2.5 }),
+      );
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "anthropic",
+        "claude-3.5-sonnet",
+        makeSummaryInput({ total_cost: 4.0 }),
+      );
 
       const result = repo.getTotalCostByModel("all");
 
@@ -753,16 +1112,26 @@ describe("UsageRepository", () => {
 
   describe("getProviderSummary", () => {
     it("should return provider summary with correct aggregations", () => {
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", makeSummaryInput({
-        total_tokens: 500,
-        total_cost: 1.5,
-        request_count: 5,
-      }));
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o-mini", makeSummaryInput({
-        total_tokens: 200,
-        total_cost: 0.5,
-        request_count: 2,
-      }));
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput({
+          total_tokens: 500,
+          total_cost: 1.5,
+          request_count: 5,
+        }),
+      );
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o-mini",
+        makeSummaryInput({
+          total_tokens: 200,
+          total_cost: 0.5,
+          request_count: 2,
+        }),
+      );
 
       const summary = repo.getProviderSummary("openai", "all");
 
@@ -781,13 +1150,18 @@ describe("UsageRepository", () => {
 
   describe("getModelSummary", () => {
     it("should return model summary with correct data", () => {
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", makeSummaryInput({
-        prompt_tokens: 100,
-        completion_tokens: 50,
-        total_tokens: 150,
-        total_cost: 0.75,
-        request_count: 3,
-      }));
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput({
+          prompt_tokens: 100,
+          completion_tokens: 50,
+          total_tokens: 150,
+          total_cost: 0.75,
+          request_count: 3,
+        }),
+      );
 
       const summary = repo.getModelSummary("gpt-4o", "all");
 
@@ -811,21 +1185,52 @@ describe("UsageRepository", () => {
 
   describe("getDailySummary", () => {
     it("should return daily summaries within date range", () => {
-      repo.upsertDailySummary("2026-04-17", "openai", "gpt-4o", makeSummaryInput());
-      repo.upsertDailySummary("2026-04-18", "openai", "gpt-4o", makeSummaryInput());
-      repo.upsertDailySummary("2026-04-19", "openai", "gpt-4o", makeSummaryInput());
+      repo.upsertDailySummary(
+        "2026-04-17",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput(),
+      );
+      repo.upsertDailySummary(
+        "2026-04-18",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput(),
+      );
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput(),
+      );
 
-      const result = repo.getDailySummary({ start: "2026-04-18", end: "2026-04-19" });
+      const result = repo.getDailySummary({
+        start: "2026-04-18",
+        end: "2026-04-19",
+      });
       expect(result).toHaveLength(2);
     });
   });
 
   describe("getWeeklySummary", () => {
     it("should return weekly summaries within date range", () => {
-      repo.upsertWeeklySummary("2026-04-06", "openai", "gpt-4o", makeSummaryInput());
-      repo.upsertWeeklySummary("2026-04-13", "openai", "gpt-4o", makeSummaryInput());
+      repo.upsertWeeklySummary(
+        "2026-04-06",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput(),
+      );
+      repo.upsertWeeklySummary(
+        "2026-04-13",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput(),
+      );
 
-      const result = repo.getWeeklySummary({ start: "2026-04-13", end: "2026-04-13" });
+      const result = repo.getWeeklySummary({
+        start: "2026-04-13",
+        end: "2026-04-13",
+      });
       expect(result).toHaveLength(1);
     });
   });
@@ -871,9 +1276,15 @@ describe("UsageRepository", () => {
 
   describe("deleteUsageBefore", () => {
     it("should delete logs before the given date and return count", () => {
-      repo.insertUsageLog(makeLogInput({ requested_at: "2026-01-01T10:00:00.000Z" }));
-      repo.insertUsageLog(makeLogInput({ requested_at: "2026-01-15T10:00:00.000Z" }));
-      repo.insertUsageLog(makeLogInput({ requested_at: "2026-04-19T10:00:00.000Z" }));
+      repo.insertUsageLog(
+        makeLogInput({ requested_at: "2026-01-01T10:00:00.000Z" }),
+      );
+      repo.insertUsageLog(
+        makeLogInput({ requested_at: "2026-01-15T10:00:00.000Z" }),
+      );
+      repo.insertUsageLog(
+        makeLogInput({ requested_at: "2026-04-19T10:00:00.000Z" }),
+      );
 
       const deleted = repo.deleteUsageBefore("2026-02-01");
       expect(deleted).toBe(2);

@@ -20,6 +20,13 @@ interface AggregateTotal {
   output_cost: number;
   total_cost: number;
   request_count: number;
+  estimated_request_count: number;
+  cached_read_tokens: number;
+  cached_write_tokens: number;
+  image_tokens: number;
+  audio_tokens: number;
+  reasoning_tokens: number;
+  image_count: number;
 }
 
 interface ModelBreakdown {
@@ -90,6 +97,16 @@ interface UsageLog {
   app_name: string | null;
   tags: string | null;
   source: string;
+  is_estimated: boolean;
+  estimation_source: string | null;
+  pricing_source: string | null;
+  cached_read_tokens: number;
+  cached_write_tokens: number;
+  image_tokens: number;
+  audio_tokens: number;
+  reasoning_tokens: number;
+  image_count: number;
+  estimated_request_count: number;
   requested_at: string;
   completed_at: string | null;
   created_at: string;
@@ -118,6 +135,13 @@ interface DailySummary {
   total_cost: number;
   error_count: number;
   avg_duration_ms: number;
+  estimated_request_count: number;
+  cached_read_tokens: number;
+  cached_write_tokens: number;
+  image_tokens: number;
+  audio_tokens: number;
+  reasoning_tokens: number;
+  image_count: number;
 }
 
 interface WeeklySummary {
@@ -134,6 +158,13 @@ interface WeeklySummary {
   total_cost: number;
   error_count: number;
   avg_duration_ms: number;
+  estimated_request_count: number;
+  cached_read_tokens: number;
+  cached_write_tokens: number;
+  image_tokens: number;
+  audio_tokens: number;
+  reasoning_tokens: number;
+  image_count: number;
 }
 
 interface ProxyAPI {
@@ -157,14 +188,22 @@ interface ProxyAPI {
   dbGetWeeklySummary: (start: string, end: string) => Promise<WeeklySummary[]>;
 
   // Database — per-provider / per-model
-  dbGetProviderSummary: (providerId: string, period: Period) => Promise<ProviderSummary>;
-  dbGetModelSummary: (modelId: string, period: Period) => Promise<ModelBreakdown>;
+  dbGetProviderSummary: (
+    providerId: string,
+    period: Period,
+  ) => Promise<ProviderSummary>;
+  dbGetModelSummary: (
+    modelId: string,
+    period: Period,
+  ) => Promise<ModelBreakdown>;
 
   // Database — usage logs
   dbGetUsageLogs: (filters: UsageFilters) => Promise<UsageLog[]>;
 
   // Database — aggregations
-  dbGetTotalTokensByProvider: (period: Period) => Promise<Record<string, number>>;
+  dbGetTotalTokensByProvider: (
+    period: Period,
+  ) => Promise<Record<string, number>>;
   dbGetTotalCostByProvider: (period: Period) => Promise<Record<string, number>>;
   dbGetTotalTokensByModel: (period: Period) => Promise<Record<string, number>>;
   dbGetTotalCostByModel: (period: Period) => Promise<Record<string, number>>;
