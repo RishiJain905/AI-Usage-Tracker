@@ -4,7 +4,11 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { format, startOfWeek } from "date-fns";
 import Database from "better-sqlite3";
 import { ProxyServer } from "./proxy/server";
-import { registerProxyIpcHandlers } from "./ipc/handlers";
+import {
+  registerProxyIpcHandlers,
+  broadcastToRenderer,
+  broadcastUsageUpdate,
+} from "./ipc/handlers";
 import { registerAllProviders } from "./proxy/providers";
 import { initDatabase, closeDatabase } from "./database";
 import { UsageRepository } from "./database/repository";
@@ -139,6 +143,12 @@ app.whenReady().then(async () => {
     if (proxyServer) {
       registerProxyIpcHandlers(proxyServer, repository);
 
+      // Notify renderer that proxy is running
+      broadcastToRenderer("proxy-status", {
+        isRunning: true,
+        port: proxyServer.port,
+      });
+
       // Wire proxy events to database
       proxyServer.on("request-completed", (event: ProxyEvent) => {
         const data = event.data as ProxyCompletedEventData;
@@ -247,6 +257,15 @@ app.whenReady().then(async () => {
             reasoning_tokens: usage.reasoningTokens ?? 0,
             image_count: usage.imageCount ?? 0,
           });
+
+          // Broadcast usage update to renderer so the UI can refresh
+          broadcastUsageUpdate({
+            providerId: providerId,
+            modelId: modelId,
+            totalTokens: usage.totalTokens,
+            totalCost: cost.totalCost,
+            period: "today",
+          });
         } else if (repository) {
           repository.insertUsageLog({
             provider_id: data.provider ?? "unknown",
@@ -277,9 +296,13 @@ app.whenReady().then(async () => {
         // (is_error flag). This handler is for network-level errors that
         // never got a response.
       });
+    } else {
+      // Proxy server failed to start (all ports in use)
+      broadcastToRenderer("proxy-status", { isRunning: false, port: null });
     }
   } catch (err) {
     console.error("[Main] Proxy server initialization failed:", err);
+    broadcastToRenderer("proxy-status", { isRunning: false, port: null });
   }
 
   // Always create the window, even if proxy failed

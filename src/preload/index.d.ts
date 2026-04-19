@@ -216,6 +216,18 @@ interface ProxyAPI {
   // Database — settings
   dbGetSetting: (key: string) => Promise<string | null>;
   dbSetSetting: (key: string, value: string) => Promise<boolean>;
+
+  // Real-time events (Main → Renderer)
+  onUsageUpdated: (callback: (data: unknown) => void) => () => void;
+  onProxyStatus: (
+    callback: (status: { isRunning: boolean; port: number | null }) => void,
+  ) => () => void;
+  onProviderError: (
+    callback: (error: { providerId: string; message: string }) => void,
+  ) => () => void;
+
+  // Proxy control
+  toggleProxy: () => Promise<boolean>;
 }
 
 declare global {

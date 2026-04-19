@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain, BrowserWindow } from "electron";
 import type { ProxyServer } from "../proxy/server";
 import type { ProxyStatus } from "../proxy/types";
 import type { UsageRepository } from "../database/repository";
@@ -100,10 +100,7 @@ export function registerProxyIpcHandlers(
 
   ipcMain.handle(
     "db:get-usage-logs",
-    (
-      _event,
-      filters: Parameters<UsageRepository["getUsageLogs"]>[0],
-    ) => {
+    (_event, filters: Parameters<UsageRepository["getUsageLogs"]>[0]) => {
       return repository?.getUsageLogs(filters);
     },
   );
@@ -115,19 +112,13 @@ export function registerProxyIpcHandlers(
     },
   );
 
-  ipcMain.handle(
-    "db:get-total-cost-by-provider",
-    (_event, period: Period) => {
-      return repository?.getTotalCostByProvider(period);
-    },
-  );
+  ipcMain.handle("db:get-total-cost-by-provider", (_event, period: Period) => {
+    return repository?.getTotalCostByProvider(period);
+  });
 
-  ipcMain.handle(
-    "db:get-total-tokens-by-model",
-    (_event, period: Period) => {
-      return repository?.getTotalTokensByModel(period);
-    },
-  );
+  ipcMain.handle("db:get-total-tokens-by-model", (_event, period: Period) => {
+    return repository?.getTotalTokensByModel(period);
+  });
 
   ipcMain.handle("db:get-total-cost-by-model", (_event, period: Period) => {
     return repository?.getTotalCostByModel(period);
@@ -156,4 +147,53 @@ export function registerProxyIpcHandlers(
     repository?.setSetting(key, value);
     return true;
   });
+
+  // ---------------------------------------------------------------------------
+  // Proxy control handlers
+  // ---------------------------------------------------------------------------
+
+  ipcMain.handle("proxy:toggle", async (): Promise<boolean> => {
+    if (!proxyServer) return false;
+
+    try {
+      if (proxyServer.isRunning) {
+        await proxyServer.stop();
+      } else {
+        await proxyServer.start();
+      }
+      // Broadcast new status to all windows
+      broadcastToRenderer("proxy-status", {
+        isRunning: proxyServer.isRunning,
+        port: proxyServer.port,
+      });
+      return proxyServer.isRunning;
+    } catch (err) {
+      console.error("[IPC] proxy:toggle failed:", err);
+      return false;
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Broadcast helpers — send events from main to all renderer windows
+// ---------------------------------------------------------------------------
+
+/**
+ * Send an IPC event to every open BrowserWindow.
+ * Used for real-time updates (usage, proxy status, provider errors).
+ */
+export function broadcastToRenderer(channel: string, data: unknown): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, data);
+    }
+  }
+}
+
+/**
+ * Convenience helper: broadcast a usage-updated event to all renderer windows.
+ * Call this after inserting or updating usage data so the UI can refresh.
+ */
+export function broadcastUsageUpdate(data: unknown): void {
+  broadcastToRenderer("usage-updated", data);
 }

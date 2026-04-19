@@ -47,10 +47,33 @@ const api = {
     ipcRenderer.invoke("db:get-aggregate-weekly-total", weekStart),
   dbGetAggregateAllTimeTotal: () =>
     ipcRenderer.invoke("db:get-aggregate-all-time-total"),
-  dbGetSetting: (key: string) =>
-    ipcRenderer.invoke("db:get-setting", key),
+  dbGetSetting: (key: string) => ipcRenderer.invoke("db:get-setting", key),
   dbSetSetting: (key: string, value: string) =>
     ipcRenderer.invoke("db:set-setting", key, value),
+
+  // Real-time events (Main → Renderer)
+  onUsageUpdated: (callback: (data: unknown) => void) => {
+    ipcRenderer.on("usage-updated", (_event, data) => callback(data));
+    return () =>
+      ipcRenderer.removeListener("usage-updated", (_event, data) =>
+        callback(data),
+      );
+  },
+  onProxyStatus: (
+    callback: (status: { isRunning: boolean; port: number | null }) => void,
+  ) => {
+    ipcRenderer.on("proxy-status", (_event, status) => callback(status));
+    return () => ipcRenderer.removeListener("proxy-status", () => {});
+  },
+  onProviderError: (
+    callback: (error: { providerId: string; message: string }) => void,
+  ) => {
+    ipcRenderer.on("provider-error", (_event, error) => callback(error));
+    return () => ipcRenderer.removeListener("provider-error", () => {});
+  },
+
+  // Proxy control
+  toggleProxy: (): Promise<boolean> => ipcRenderer.invoke("proxy:toggle"),
 };
 
 if (process.contextIsolated) {

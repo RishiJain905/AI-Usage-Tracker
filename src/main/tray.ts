@@ -1,1 +1,1 @@
-export {} // System tray management
+export {}; // System tray management
