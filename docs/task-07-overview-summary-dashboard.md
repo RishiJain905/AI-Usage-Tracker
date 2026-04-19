@@ -259,5 +259,17 @@ formatPercentage(n: number): string;
 - Task 5 (Token Extraction & Cost Engine)
 - Task 6 (Dashboard UI Foundation)
 
+## Vitest Unit Tests
+
+**Priority**: MEDIUM — Format utilities are pure functions that should be unit-tested. UI components are not.
+
+### Required test suites:
+
+**format.ts** (`src/renderer/src/lib/format.test.ts`):
+- `formatTokens()`: 0, 999, 1_234, 1_234_567, 1_234_567_890, negative numbers, very large numbers, fractional values
+- `formatCost()`: 0, 0.001, 0.0234, 12.50, 1234.56, negative numbers, very small amounts, rounding
+- `formatRelativeTime()`: just now, seconds ago, minutes ago, hours ago, days ago, future dates
+- `formatPercentage()`: 0, 12.3, 100, 0.1, negative, > 100
+
 ## Estimated Time
 4-5 hours

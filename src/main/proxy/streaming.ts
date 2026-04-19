@@ -10,6 +10,9 @@
  */
 
 import { TokenUsage } from "./types";
+import { providerRegistry } from "./providers";
+import type { Provider } from "./providers/base";
+import { UnknownProvider } from "./providers/unknown";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -106,8 +109,14 @@ function parseSSELines(body: string): string[] {
   return lines;
 }
 
+const unknownProvider = new UnknownProvider();
+
 /**
- * Extract stream usage using the provider-appropriate strategy.
+ * Extract stream usage using the provider registry.
+ *
+ * Looks up the registered provider by ID. If found, delegates extraction
+ * to that provider's extractUsageFromChunks() method. Falls back to
+ * UnknownProvider which tries multiple formats.
  */
 function extractStreamUsage(
   provider: string,
@@ -117,18 +126,28 @@ function extractStreamUsage(
   const chunks = parseSSELines(body);
   if (chunks.length === 0) return null;
 
-  switch (provider) {
-    case "openai":
-      return extractOpenAIStreamUsage(chunks, model, provider);
-    case "anthropic":
-      return extractAnthropicStreamUsage(chunks, model, provider);
-    default:
-      // For unknown providers, try OpenAI-style first, then Anthropic-style
-      return (
-        extractOpenAIStreamUsage(chunks, model, provider) ??
-        extractAnthropicStreamUsage(chunks, model, provider)
-      );
+  const providerImpl: Provider | undefined = providerRegistry.get(provider);
+  if (providerImpl) {
+    const usage = providerImpl.extractUsageFromChunks(chunks);
+    if (usage) return usage;
   }
+
+  // Fallback: try unknown provider for unrecognized formats
+  const fallbackUsage = unknownProvider.extractUsageFromChunks(chunks);
+  if (fallbackUsage) {
+    // Override with the actual provider and model from the route
+    return {
+      ...fallbackUsage,
+      modelId: model || fallbackUsage.modelId,
+      providerId: provider,
+    };
+  }
+
+  // Last resort: try the legacy OpenAI/Anthropic extractors
+  return (
+    extractOpenAIStreamUsage(chunks, model, provider) ??
+    extractAnthropicStreamUsage(chunks, model, provider)
+  );
 }
 
 // ---------------------------------------------------------------------------

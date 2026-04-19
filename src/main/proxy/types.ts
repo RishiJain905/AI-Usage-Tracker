@@ -52,3 +52,9 @@ export interface ProviderConfig {
   authMode: ProviderAuthMode;
   apiKey?: string;
 }
+
+export interface ProviderInfo {
+  id: string;
+  name: string;
+  baseUrl: string;
+}

@@ -272,5 +272,39 @@ class ZhipuAiSync {
 - Task 9 (Charts & Cost Tracking Views)
 - Task 10 (Settings & Configuration UI)
 
+## Vitest Unit Tests
+
+**Priority**: MEDIUM — Export formatters and sync deduplication contain important logic. Backup/restore and UI components don't need unit tests.
+
+### Required test suites:
+
+**CSV export** (`src/main/export/csv.test.ts`):
+- Export with headers, all columns present
+- Export with `includeAggregateRow: true` — verify TOTAL row sums all models correctly
+- Export with `groupByModel: true` — verify subtotal rows per model with model name
+- Date range filtering: only logs within range are included
+- Provider/model filtering: only matching logs are included
+- Edge cases: empty result set, single row, special characters in data (comma escaping, quotes)
+
+**JSON export** (`src/main/export/json.test.ts`):
+- Export produces valid JSON
+- Export with `includeSummary: true` — verify aggregate summary object
+- Export with `includePerModelSummary: true` — verify per-model breakdown array
+- Export with both flags — verify both sections present
+- Round-trip: parse exported JSON and verify all fields match source data
+
+**ZhipuAI sync deduplication** (`src/main/sync/zhipuai-sync.test.ts`):
+- `findMissing()` correctly identifies entries not already in usage_logs
+- Skips entries already tracked by proxy (same provider, model, date, approximate tokens)
+- Marks synced entries with `source: 'sync'`
+- Returns correct `SyncResult` with imported/skipped counts
+- Edge cases: empty remote data, all entries already tracked, complete gap fill
+
+**Database cleanup** (`src/main/database/cleanup.test.ts`):
+- `runCleanup()` deletes logs older than retention period
+- Never deletes from daily_summary or weekly_summary (aggregated data preserved)
+- Returns correct count of deleted records
+- Edge cases: retention of 0 days, very large retention
+
 ## Estimated Time
 3-4 hours

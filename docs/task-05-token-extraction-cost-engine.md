@@ -195,6 +195,51 @@ The IPC event payload must include BOTH the per-model breakdown and the aggregat
 - Edge cases handled: zero tokens, null usage, negative tokens (clamp to 0)
 - Unit tests with real API response samples
 
+## Vitest Unit Tests
+
+**Test files**: `src/main/proxy/token-extractor.test.ts`, `src/main/proxy/token-estimator.test.ts`, `src/main/cost/calculator.test.ts`, `src/main/cost/pricing.test.ts`
+
+**Priority**: HIGH — Token extraction and cost calculation are the most critical logic in the app. Pure functions with clear inputs/outputs make them ideal for unit testing.
+
+### Required test suites:
+
+**TokenExtractor** (`token-extractor.test.ts`):
+- Extract usage from OpenAI response format (standard + streaming)
+- Extract usage from Anthropic response format (message_start + message_delta)
+- Extract usage from Gemini response format (usageMetadata)
+- Extract usage from Ollama response format (local: prompt_eval_count/eval_count; cloud: OpenAI-compatible)
+- Extract usage from Groq response format (includes cached_tokens in details)
+- Extract usage from GLM, MiniMax, Mistral (OpenAI-compatible variants)
+- Handle missing/null usage data gracefully (return null)
+- Handle zero tokens (return null or zero object per spec)
+- Handle malformed JSON responses
+- Streaming extraction from SSE chunks for all providers
+- Accumulated streaming: multiple chunks with partial usage in final chunk
+
+**TokenEstimator** (`token-estimator.test.ts`):
+- Estimate tokens from plain text (~4 chars/token for English)
+- Estimate tokens from message array
+- Provider-specific adjustments (Claude ~3.5 chars/token)
+- Edge cases: empty string, very long text, special characters
+
+**CostCalculator** (`calculator.test.ts`):
+- Calculate cost for known models (GPT-4o, Claude 3.5 Sonnet, etc.)
+- Per-model cost: each model calculated independently
+- Batch calculation: returns both per-model AND aggregate totals
+- Period-aware aggregate cost calculation
+- Prompt caching discount: OpenAI 50%, Anthropic 90%, Groq cached_tokens
+- Per-image pricing (DALL-E fixed cost)
+- Batch API 50% discount
+- Edge cases: zero tokens → $0 cost, null usage → skip, negative tokens → clamp to 0
+- Cost calculation matches expected values for all supported models (verify against known pricing)
+
+**PricingStore** (`pricing.test.ts`):
+- Get pricing for existing model
+- Get pricing for unknown model (return null)
+- Update pricing for a model
+- GetAllPricing returns all models
+- isStale() returns correct boolean based on timestamp
+
 ## Dependencies
 - Task 3 (Provider Implementations)
 - Task 4 (SQLite Schema & Data Layer)

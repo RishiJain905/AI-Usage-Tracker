@@ -20,10 +20,13 @@ import {
   ProxyEvent,
   ProxyEventType,
   ProviderConfig,
+  TokenUsage,
 } from "./types";
 import { extractProvider, getProviderRoute, PROVIDER_ROUTES } from "./routing";
 import { sanitizeHeaders, sanitizeUrl } from "./security";
 import { isSSEResponse, createStreamingHandler } from "./streaming";
+import { providerRegistry, UnknownProvider } from "./providers";
+import type { Provider } from "./providers/base";
 
 /** Headers that should NOT be forwarded to the upstream provider. */
 const HOP_BY_HOP_HEADERS = new Set([
@@ -55,12 +58,14 @@ export class ProxyServer {
   private readonly timeout: number;
   private readonly emitter: EventEmitter;
   private readonly providers: Partial<Record<string, Partial<ProviderConfig>>>;
+  private readonly unknownProvider: UnknownProvider;
 
   constructor(options: ProxyServerOptions = {}) {
     this._port = options.port ?? 8765;
     this.timeout = options.timeout ?? 120_000;
     this.emitter = new EventEmitter();
     this.providers = options.providers ?? {};
+    this.unknownProvider = new UnknownProvider();
   }
 
   // ---------------------------------------------------------------------------
@@ -602,12 +607,13 @@ export class ProxyServer {
       }
 
       // Try to extract usage from non-streaming response body
-      let usage: import("./types").TokenUsage | undefined;
+      let usage: TokenUsage | undefined;
       if (parsedBody) {
         usage = this.extractNonStreamingUsage(
           parsedBody,
           proxyRequest.provider,
           proxyRequest.model,
+          proxyRequest.body as Record<string, unknown> | undefined,
         );
       }
 
@@ -640,53 +646,42 @@ export class ProxyServer {
   }
 
   // ---------------------------------------------------------------------------
-  // Non-streaming usage extraction
+  // Non-streaming usage extraction — provider-based dispatch
   // ---------------------------------------------------------------------------
 
   /**
-   * Extract TokenUsage from a standard (non-streaming) API response body.
+   * Extract TokenUsage from a standard (non-streaming) API response body
+   * using the provider registry.
    *
-   * OpenAI:  { "usage": { "prompt_tokens": N, "completion_tokens": N, "total_tokens": N } }
-   * Anthropic: { "usage": { "input_tokens": N, "output_tokens": N } }
+   * Looks up the registered provider by ID. If found, delegates extraction
+   * to that provider's extractUsage() method. Falls back to UnknownProvider
+   * which tries OpenAI, Anthropic, and Gemini formats.
    */
   private extractNonStreamingUsage(
     body: Record<string, unknown>,
     provider: string,
-    model: string,
-  ): import("./types").TokenUsage | undefined {
-    const usage = body.usage as Record<string, unknown> | undefined;
-    if (!usage || typeof usage !== "object") return undefined;
+    _model: string,
+    requestBody: Record<string, unknown> | undefined,
+  ): TokenUsage | undefined {
+    const providerImpl: Provider =
+      providerRegistry.get(provider) ?? this.unknownProvider;
 
-    if (provider === "anthropic") {
-      const input =
-        typeof usage.input_tokens === "number" ? usage.input_tokens : 0;
-      const output =
-        typeof usage.output_tokens === "number" ? usage.output_tokens : 0;
-      if (input === 0 && output === 0) return undefined;
-      return {
-        promptTokens: input,
-        completionTokens: output,
-        totalTokens: input + output,
-        modelId: model,
-        providerId: provider,
-      };
+    const usage = providerImpl.extractUsage(requestBody, body);
+    if (usage) return usage;
+
+    // Fallback: try unknown provider for unrecognized formats
+    if (providerImpl !== this.unknownProvider) {
+      const fallbackUsage = this.unknownProvider.extractUsage(
+        requestBody,
+        body,
+      );
+      if (fallbackUsage) {
+        // Override providerId with the actual provider from the route
+        return { ...fallbackUsage, providerId: provider };
+      }
     }
 
-    // OpenAI and compatible providers
-    const pt =
-      typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : 0;
-    const ct =
-      typeof usage.completion_tokens === "number" ? usage.completion_tokens : 0;
-    const tt =
-      typeof usage.total_tokens === "number" ? usage.total_tokens : pt + ct;
-    if (pt === 0 && ct === 0) return undefined;
-    return {
-      promptTokens: pt,
-      completionTokens: ct,
-      totalTokens: tt,
-      modelId: model,
-      providerId: provider,
-    };
+    return undefined;
   }
 
   // ---------------------------------------------------------------------------

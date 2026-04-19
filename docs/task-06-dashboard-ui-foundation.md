@@ -253,5 +253,18 @@ The UI foundation sets up the dual-view pattern used everywhere:
 ## Dependencies
 - Task 1 (Project Scaffolding)
 
+## Vitest Unit Tests
+
+**Priority**: LOW — Mostly UI/infrastructure. Only Zustand stores contain testable logic.
+
+### Optional test suites:
+
+**usageStore** (`src/renderer/src/stores/usageStore.test.ts`):
+- Store actions call the correct IPC methods
+- Period changes trigger data re-fetch
+- State updates correctly (aggregateTotal, modelBreakdown, etc.)
+
+> Note: Zustand store tests are low priority since the logic is thin (IPC calls + state updates). The real value is in integration testing, which is better suited to E2E tests.
+
 ## Estimated Time
 4-5 hours

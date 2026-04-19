@@ -185,5 +185,9 @@ When clicking a specific model or provider entry:
 - Task 6 (Dashboard UI Foundation)
 - Task 7 (Overview & Summary Dashboard)
 
+## Vitest Unit Tests
+
+**Priority**: None — Purely UI components (React views, navigation, filtering). No backend logic to unit-test. Verify manually or with E2E tests.
+
 ## Estimated Time
 4-5 hours

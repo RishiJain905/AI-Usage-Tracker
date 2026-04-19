@@ -209,5 +209,18 @@ const PROVIDER_COLORS = {
 - Task 7 (Overview & Summary Dashboard)
 - Task 8 (Provider & Model Drill-Down)
 
+## Vitest Unit Tests
+
+**Priority**: LOW — Mostly UI/chart components. Only budget/cost projection math is worth unit-testing if extracted to a utility function.
+
+### Optional test suites:
+
+**Budget projection** (`src/renderer/src/lib/projection.test.ts`):
+- Linear projection formula: `projected = (current_spend / days_elapsed) * days_in_month`
+- Edge cases: day 1 of month (avoid division by zero), 0 spend, last day of month
+- Budget threshold detection: alert at 80% of budget
+
+> Note: Only test this if the projection logic is extracted to a standalone utility function. If it's inline in a React component, skip unit testing in favor of manual verification.
+
 ## Estimated Time
 5-6 hours

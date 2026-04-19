@@ -293,5 +293,28 @@ Show inline validation errors with red borders and error messages.
 - Task 4 (SQLite Schema & Data Layer)
 - Task 6 (Dashboard UI Foundation)
 
+## Vitest Unit Tests
+
+**Priority**: HIGH — Encryption and input validation contain security-critical logic that must be tested.
+
+### Required test suites:
+
+**API key encryption** (`src/main/security/encryption.test.ts`):
+- `encryptKey()` + `decryptKey()` round-trip: encrypted value decrypts to original
+- Error handling when `safeStorage.isEncryptionAvailable()` returns false — must throw, NOT fall back to base64
+- Keys never appear in plaintext in logs or error messages
+- `safeStorage` mock: Test that the encrypt/decrypt functions call the correct `safeStorage` methods
+
+**Input validation** (`src/main/validation/settings.test.ts`):
+- Port validation: valid range (1024-65535), reject 0, reject ports below 1024, reject non-numeric
+- URL validation: valid formats (http/https), reject malformed, reject no protocol
+- API key format validation per provider (OpenAI `sk-` prefix, Anthropic `sk-ant-`, Gemini `AIza`, etc.)
+- Budget validation: positive number, reject 0, reject negative, reject NaN
+- Required field validation: reject empty strings
+
+**IPC security** (`src/main/ipc/handlers.test.ts` — integration-style):
+- `get-api-keys` handler returns only metadata (id, providerId, maskedPreview, isValid, lastValidatedAt) — NEVER the actual key value
+- `test-api-key` handler only returns status (valid/error) — no key material in response
+
 ## Estimated Time
 4-5 hours

@@ -283,5 +283,9 @@ Before releasing:
 ## Dependencies
 - All previous tasks (the complete application)
 
+## Vitest Unit Tests
+
+**Priority**: None — Purely build/CI/CD and packaging configuration. No application logic to unit-test.
+
 ## Estimated Time
 3-4 hours
