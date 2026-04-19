@@ -73,8 +73,8 @@ The proxy must route requests to the correct provider based on the URL path pref
 |-------------|----------|------------|
 | `/openai/`  | OpenAI   | `https://api.openai.com/` |
 | `/anthropic/` | Anthropic | `https://api.anthropic.com/` |
-| `/ollama/`  | Ollama   | `http://localhost:11434/` |
-| `/glm/`     | GLM/ZhipuAI | `https://open.bigmodel.cn/` |
+| `/ollama/`  | Ollama   | Configurable: Local default `http://localhost:11434/`, Cloud `https://ollama.com/v1/` |
+| `/glm/`     | GLM/ZhipuAI | `https://api.z.ai/` |
 | `/minimax/` | MiniMax  | `https://api.minimax.chat/` |
 | `/gemini/`  | Google   | `https://generativelanguage.googleapis.com/` |
 | `/mistral/` | Mistral  | `https://api.mistral.ai/` |
@@ -87,8 +87,63 @@ Extract the provider from the path, strip the prefix, and forward the remainder 
 Use Node.js `http`/`https` modules to forward requests:
 - Pipe the original request body
 - Forward all relevant headers (Authorization, Content-Type, etc.)
+- **API key handling** (two modes per provider, configured in settings):
+  - **Pass-through mode (default)**: Forward the client's `Authorization` header unchanged — the client app already has its own key
+  - **Inject mode**: Strip the client's `Authorization` header and replace it with the stored API key for that provider — useful for centralized key management
 - Handle both JSON and multipart form-data
 - Support request timeouts (configurable, default 120s)
+
+### 2.3a Implement header sanitization for logging
+
+**CRITICAL SECURITY**: The proxy logs all requests and responses for tracking. API keys MUST NEVER appear in any log, event, or IPC message.
+
+```typescript
+// Sensitive headers that must be stripped from all logging
+const SENSITIVE_HEADERS = [
+  'authorization',
+  'x-api-key',
+  'api-key',
+  'cookie',
+  'set-cookie',
+  'proxy-authorization',
+];
+
+// Sanitize headers before logging or emitting events
+function sanitizeHeaders(headers: Record<string, string>): Record<string, string> {
+  const sanitized = { ...headers };
+  for (const key of Object.keys(sanitized)) {
+    if (SENSITIVE_HEADERS.includes(key.toLowerCase())) {
+      const value = sanitized[key];
+      // Mask: "Bearer sk-proj-abc123..." → "Bearer sk-pr...3"
+      if (value.length > 8) {
+        sanitized[key] = value.slice(0, 6) + '...' + value.slice(-2);
+      } else {
+        sanitized[key] = '****';
+      }
+    }
+  }
+  return sanitized;
+}
+```
+
+Apply sanitization to:
+- All `ProxyRequest` and `ProxyResponse` objects emitted via IPC
+- All log entries stored in `usage_logs`
+- All debug/error output to console
+- The request body (for Gemini, which passes the key as a URL parameter — strip `key=` from logged URLs)
+
+### 2.3b Local proxy security boundary
+
+The proxy listens on `localhost:8765` (or configured port). Security implications:
+
+- **Same-machine access**: Any application on the user's machine can connect to the proxy and send requests. This is by design — client apps (Cursor, custom scripts, etc.) need to reach it.
+- **Inject mode risk**: When "Proxy Injects Key" mode is enabled for a provider, ANY local app can make requests to `http://localhost:8765/openai/v1/...` and the proxy will inject the stored API key. This means the key is accessible to any local process. **Mitigate by:**
+  - Clearly warning the user when they enable inject mode
+  - Logging which app/IP made each request (the `app_name` field)
+  - Recommending pass-through mode for most users
+- **No external access**: The proxy binds to `127.0.0.1` only (not `0.0.0.0`). No remote machine can connect.
+- **HTTPS**: All forwarded requests to provider APIs use HTTPS. Tokens between proxy and provider are encrypted in transit.
+- **Database file permissions**: The SQLite DB is stored in `app.getPath('userData')` which uses the OS's default per-user directory permissions. Other users on the same machine cannot read it (assuming standard OS multi-user isolation).
 
 ### 2.4 Handle streaming responses
 
@@ -165,7 +220,7 @@ Add a `/health` endpoint that returns:
   "providers": {
     "openai": "connected",
     "anthropic": "connected",
-    "ollama": "offline"
+    "ollama": "offline"     // Status depends on configured base URL (local or cloud)
   }
 }
 ```

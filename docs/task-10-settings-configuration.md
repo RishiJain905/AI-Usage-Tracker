@@ -89,8 +89,11 @@ File: `src/renderer/src/components/settings/ProviderConfig.tsx`
 │  │   API Key: sk-ant-...****                      ││
 │  ├──────────────────────────────────────────────────┤│
 │  │ ● Ollama     [Enabled ✎]  [Test Connection]     ││
-│  │   Base URL: http://localhost:11434              ││
-│  │   (No API key required)                         ││
+│  │   Mode: [Local ▼] (Local / Cloud)              ││
+│  │   Local URL:  http://localhost:11434             ││
+│  │   Cloud URL:  https://ollama.com/v1             ││
+│  │   API Key: (required for cloud mode)            ││
+│  │   Cloud pricing: [Configure]                    ││
 │  ├──────────────────────────────────────────────────┤│
 │  │ ○ Gemini     [Disabled ✎]                      ││
 │  │ ...                                             ││
@@ -102,8 +105,10 @@ File: `src/renderer/src/components/settings/ProviderConfig.tsx`
 
 Features:
 - Enable/disable each provider
-- Edit base URL (useful for proxies/self-hosted endpoints)
+- Edit base URL (useful for proxies/self-hosted endpoints, **especially Ollama cloud instances**)
 - Configure API key (links to API Key Manager)
+- **Ollama-specific**: "Mode" dropdown (Local / Cloud) — Local uses `http://localhost:11434` (no auth, no cost); Cloud uses `https://ollama.com/v1` (requires API key, supports per-token pricing). The provider auto-detects response format: local uses `prompt_eval_count`/`eval_count`, cloud uses OpenAI-compatible `usage.prompt_tokens`/`completion_tokens`.
+- **"Proxy Injects Key" toggle** per provider: When ON, the proxy strips any `Authorization` header from the client and injects the stored API key instead. When OFF (default), the proxy passes the client's auth header through unchanged.
 - Test connection button (sends minimal request to verify connectivity)
 - Custom pricing configuration per provider/model
 - "Add Custom Provider" for providers not built-in
@@ -130,7 +135,9 @@ File: `src/renderer/src/components/settings/ApiKeyManager.tsx`
 │  │  Last validated: Never       ⚠ Not tested       ││
 │  ├──────────────────────────────────────────────────┤│
 │  │  Ollama                                         ││
-│  │  (No API key required for local models)         ││
+│  │  Local: No key required                        ││
+│  │  Cloud: ol-...4d2e            [Show] [Edit] [✕] ││
+│  │  Last validated: 1 hour ago   ✓ Valid (cloud)  ││
 │  └──────────────────────────────────────────────────┘│
 │                                                       │
 │  [+ Add API Key]                                      │
@@ -146,6 +153,19 @@ Features:
 - Validate key (sends test request)
 - Keys are stored encrypted in the database (using `safeStorage` API)
 
+**How stored API keys are used — two paths:**
+
+1. **Test Connection / Validation**: The stored key is used to send a minimal request to the provider to verify the key is valid and the endpoint is reachable. This powers the "Test Connection" button on each provider.
+
+2. **Proxy injection mode (optional)**: By default, client apps send their own API key in the `Authorization` header, and the proxy just passes it through. However, the user can enable **"Proxy Injects Key"** mode per provider. When enabled, the client sends requests to the proxy WITHOUT an API key, and the proxy injects the stored key before forwarding. This is useful for:
+   - Centralized key management (change key in one place instead of every client)
+   - Preventing API keys from being stored in multiple client apps
+   - Sharing a single API key across multiple tools
+
+   **WARNING**: When proxy injection is enabled, clients must NOT include their own `Authorization` header (the proxy strips and replaces it). Document this clearly in the UI.
+
+All cloud providers require an API key stored in the tracker. Local-only providers (like Ollama in local mode) do not.
+
 ### 10.4 Implement API key encryption
 
 Use Electron's `safeStorage` API to encrypt API keys at rest:
@@ -155,19 +175,52 @@ Use Electron's `safeStorage` API to encrypt API keys at rest:
 import { safeStorage } from 'electron';
 
 function encryptKey(key: string): string {
-  if (safeStorage.isEncryptionAvailable()) {
-    return safeStorage.encryptString(key).toString('base64');
+  if (!safeStorage.isEncryptionAvailable()) {
+    // CRITICAL: Do NOT fall back to base64 — that is encoding, not encryption.
+    // A plaintext base64 value in the SQLite DB is readable by anyone with file access.
+    // Instead, refuse to store keys and show a user-facing error:
+    throw new Error(
+      'Secure storage is not available on this device. ' +
+      'API keys cannot be safely stored. Ensure OS keychain is available ' +
+      '(Windows: DPAPI, macOS: Keychain, Linux: Secret Service/libsecret).'
+    );
   }
-  // Fallback: base64 encoding (not secure, but better than plaintext)
-  return Buffer.from(key).toString('base64');
+  return safeStorage.encryptString(key).toString('base64');
 }
 
 function decryptKey(encrypted: string): string {
-  if (safeStorage.isEncryptionAvailable()) {
-    return safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Secure storage is not available. Cannot decrypt API keys.');
   }
-  return Buffer.from(encrypted, 'base64').toString();
+  return safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
 }
+```
+
+**How `safeStorage` works:**
+- **Windows**: Uses DPAPI (Data Protection API) — tied to the Windows user account. Other users on the same machine cannot decrypt.
+- **macOS**: Uses Keychain — tied to the user's login keychain.
+- **Linux**: Uses libsecret/Secret Service — depends on a keyring daemon (GNOME Keyring, KDE Wallet). If unavailable, `safeStorage.isEncryptionAvailable()` returns `false`.
+
+**Security guarantees:**
+- The SQLite DB file (`ai-tracker.db`) contains encrypted blobs in the `api_keys` table. Even if someone copies the DB file, they cannot decrypt the keys without access to the OS keychain.
+- API keys are ONLY decrypted in the main process (Node.js). They are NEVER sent to the renderer process via IPC.
+- The renderer can only see: key ID, provider, masked preview (`sk-...****`), validation status, and last-validated date.
+
+**Key never crosses to renderer:**
+```typescript
+// In IPC handler — the renderer NEVER sees the actual key
+ipcMain.handle('get-api-keys', () => {
+  const keys = repository.getApiKeyMetadata(); // Returns only: id, providerId, maskedPreview, isValid, lastValidatedAt
+  return keys; // NO encrypted_key, NO decrypted value
+});
+
+// Validate key — done entirely in main process
+ipcMain.handle('test-api-key', async (_event, { providerId, keyId }) => {
+  const encryptedKey = repository.getEncryptedKey(keyId);
+  const decryptedKey = decryptKey(encryptedKey); // Only in main process
+  const result = await testProviderConnection(providerId, decryptedKey);
+  return { valid: result.success, error: result.error }; // Only return status
+});
 ```
 
 ### 10.5 Build custom pricing editor

@@ -35,7 +35,7 @@ Build detailed views for exploring usage by provider and by model with filtering
 │  │ Provider  Requests  Tokens    Cost    Avg Latency││
 │  │ OpenAI    180      450K     $12.50   1.2s       ││
 │  │ Anthropic 95       300K     $8.00    0.9s       ││
-│  │ Ollama    67       200K     Free     3.4s       ││
+│  │ Ollama    67       200K     Free*    3.4s       ││
 │  │ Gemini    20       50K      $4.00    1.1s       ││
 │  └──────────────────────────────────────────────────┘│
 └──────────────────────────────────────────────────────┘
@@ -59,7 +59,7 @@ Build detailed views for exploring usage by provider and by model with filtering
 │  │ GPT-4o          ████████████  320K tok  $9.00   ││
 │  │ Claude 3.5      █████████     240K tok  $7.00   ││
 │  │ GPT-4o Mini     ██████        130K tok  $2.00   ││
-│  │ Llama 3.1       █████         100K tok  Free     ││
+│  │ Llama 3.1       █████         100K tok  Free*    ││
 │  │ Gemini 1.5      ███            50K tok  $4.00   ││
 │  └──────────────────────────────────────────────────┘│
 │                                                       │

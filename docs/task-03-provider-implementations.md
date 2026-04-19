@@ -83,9 +83,12 @@ File: `src/main/proxy/providers/anthropic.ts`
 
 File: `src/main/proxy/providers/ollama.ts`
 
-**API Format:**
+**Ollama has TWO distinct API modes** — local and cloud — with different response formats:
+
+**Local Ollama API:**
 - Endpoint: `/api/chat`, `/api/generate`, `/api/embeddings`
-- Auth: None (local)
+- Base URL: `http://localhost:11434` (default, configurable)
+- Auth: None
 - Response:
 ```json
 {
@@ -94,8 +97,63 @@ File: `src/main/proxy/providers/ollama.ts`
 }
 ```
 - Streaming: Each chunk has partial counts; final chunk has totals
-- Model field: `requestBody.model`
-- Note: Ollama may not always return token counts depending on version
+- Note: May not always return token counts depending on version
+
+**Cloud Ollama API (https://ollama.com/v1):**
+- Endpoint: `/v1/chat/completions` (OpenAI-compatible!)
+- Base URL: `https://ollama.com/v1` (default cloud URL, configurable)
+- Auth: Bearer token (API key required)
+- Response:
+```json
+{
+  "usage": {
+    "prompt_tokens": 50,
+    "completion_tokens": 150,
+    "total_tokens": 200
+  }
+}
+```
+- Streaming: OpenAI-compatible SSE with `stream_options.include_usage: true`
+- Pricing: Per-token pricing applied based on model (user-configurable)
+
+**Provider implementation must handle both modes:**
+```typescript
+class OllamaProvider implements Provider {
+  // Detect mode from base URL
+  isCloudMode(baseUrl: string): boolean {
+    return !baseUrl.includes('localhost') && !baseUrl.includes('127.0.0.1');
+  }
+
+  // Use different extraction logic based on mode
+  extractUsage(requestBody: any, responseBody: any): TokenUsage | null {
+    if (this.isCloudMode(this.baseUrl)) {
+      // OpenAI-compatible format: usage.prompt_tokens / completion_tokens
+      return {
+        promptTokens: responseBody.usage?.prompt_tokens ?? 0,
+        completionTokens: responseBody.usage?.completion_tokens ?? 0,
+        totalTokens: responseBody.usage?.total_tokens ?? 0,
+        modelId: requestBody.model,
+        providerId: 'ollama',
+      };
+    } else {
+      // Local Ollama format: prompt_eval_count / eval_count
+      return {
+        promptTokens: responseBody.prompt_eval_count ?? 0,
+        completionTokens: responseBody.eval_count ?? 0,
+        totalTokens: (responseBody.prompt_eval_count ?? 0) + (responseBody.eval_count ?? 0),
+        modelId: requestBody.model,
+        providerId: 'ollama',
+      };
+    }
+  }
+}
+```
+
+**Settings integration:**
+- When user switches Ollama mode to "Cloud" in settings, base URL changes to `https://ollama.com/v1`
+- API key becomes required
+- Models under cloud Ollama are registered with `isLocal: false`
+- Cloud Ollama models can have user-defined pricing for cost tracking
 
 ### 3.5 GLM (ZhipuAI) provider
 
@@ -116,6 +174,19 @@ File: `src/main/proxy/providers/glm.ts`
 ```
 - Compatible with OpenAI format
 - Models: `glm-4`, `glm-4-plus`, `glm-4-flash`, `glm-4v`
+
+**ZhipuAI Usage API (for catch-up sync):**
+ZhipuAI provides monitoring endpoints that can backfill missed tracking data if the proxy was down:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `https://api.z.ai/api/monitor/usage/quota/limit` | Current quota limits and percentages |
+| `https://api.z.ai/api/monitor/usage/model-usage?startTime=...&endTime=...` | Model usage stats (24h rolling window) |
+| `https://api.z.ai/api/monitor/usage/tool-usage?startTime=...&endTime=...` | MCP tool usage stats |
+
+Authentication: `Authorization: {token}` (NO "Bearer" prefix — token is passed directly)
+
+These endpoints enable a **catch-up sync** feature (see Task 12) that can import usage data retroactively when the proxy was offline.
 
 ### 3.6 MiniMax provider
 

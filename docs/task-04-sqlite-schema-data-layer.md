@@ -27,7 +27,7 @@ CREATE TABLE models (
   name TEXT NOT NULL,            -- Display name
   input_price_per_million REAL, -- Price per 1M input tokens (USD)
   output_price_per_million REAL,-- Price per 1M output tokens (USD)
-  is_local BOOLEAN DEFAULT 0,   -- Local model (e.g., Ollama)
+  is_local BOOLEAN DEFAULT 0,   -- Local model (e.g., local Ollama). Cloud Ollama = false
   created_at TEXT DEFAULT (datetime('now')),
   FOREIGN KEY (provider_id) REFERENCES providers(id)
 );
@@ -59,6 +59,7 @@ CREATE TABLE usage_logs (
   -- Additional context
   app_name TEXT,                 -- Which app made the request (if detectable)
   tags TEXT,                     -- JSON array of tags
+  source TEXT DEFAULT 'proxy',   -- 'proxy' (live-tracked) or 'sync' (backfilled from provider API)
 
   -- Timestamps
   requested_at TEXT NOT NULL,    -- When the request was made
@@ -240,7 +241,9 @@ const SEED_PROVIDERS = [
   { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com', icon: 'openai' },
   { id: 'anthropic', name: 'Anthropic', baseUrl: 'https://api.anthropic.com', icon: 'anthropic' },
   { id: 'ollama', name: 'Ollama', baseUrl: 'http://localhost:11434', icon: 'ollama' },
-  { id: 'glm', name: 'ZhipuAI (GLM)', baseUrl: 'https://open.bigmodel.cn', icon: 'glm' },
+  // Note: Ollama has two modes — local (http://localhost:11434) and cloud (https://ollama.com/v1)
+  // The baseUrl is a default for local mode; cloud mode uses https://ollama.com/v1
+  { id: 'glm', name: 'ZhipuAI (GLM)', baseUrl: 'https://api.z.ai', icon: 'glm' },
   { id: 'minimax', name: 'MiniMax', baseUrl: 'https://api.minimax.chat', icon: 'minimax' },
   { id: 'gemini', name: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com', icon: 'gemini' },
   { id: 'mistral', name: 'Mistral', baseUrl: 'https://api.mistral.ai', icon: 'mistral' },
@@ -286,10 +289,16 @@ const SEED_MODELS = [
   { id: 'llama-3.1-8b-instant', providerId: 'groq', name: 'Llama 3.1 8B', inputPrice: 0.05, outputPrice: 0.08 },
   { id: 'mixtral-8x7b-32768', providerId: 'groq', name: 'Mixtral 8x7B', inputPrice: 0.24, outputPrice: 0.24 },
 
-  // Ollama (free/local - no pricing)
+  // Ollama — local models (free, no pricing, default localhost endpoint)
   { id: 'llama3.1', providerId: 'ollama', name: 'Llama 3.1', inputPrice: 0, outputPrice: 0, isLocal: true },
   { id: 'mistral-nemo', providerId: 'ollama', name: 'Mistral Nemo', inputPrice: 0, outputPrice: 0, isLocal: true },
   { id: 'codellama', providerId: 'ollama', name: 'Code Llama', inputPrice: 0, outputPrice: 0, isLocal: true },
+  // Ollama — cloud models via https://ollama.com/v1 (OpenAI-compatible API, per-token pricing)
+  // Registered when user enables Ollama cloud mode in settings
+  // Pricing applied per Ollama's published cloud rates; user can override
+  { id: 'ollama-cloud-llama3.1', providerId: 'ollama', name: 'Llama 3.1 (Ollama Cloud)', inputPrice: 0, outputPrice: 0, isLocal: false },
+  { id: 'ollama-cloud-qwen2.5', providerId: 'ollama', name: 'Qwen 2.5 (Ollama Cloud)', inputPrice: 0, outputPrice: 0, isLocal: false },
+  { id: 'ollama-cloud-gemma3', providerId: 'ollama', name: 'Gemma 3 (Ollama Cloud)', inputPrice: 0, outputPrice: 0, isLocal: false },
 ];
 ```
 

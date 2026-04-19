@@ -124,7 +124,7 @@ Tasks that can be worked on simultaneously:
 |----------|------|------|-------------|
 | OpenAI | Cloud | Bearer token | `usage.prompt_tokens / completion_tokens` |
 | Anthropic | Cloud | x-api-key | `usage.input_tokens / output_tokens` |
-| Ollama | Local | None | `prompt_eval_count / eval_count` |
+| Ollama | Local / Cloud | None (local) or Bearer token (cloud) | Local: `prompt_eval_count`/`eval_count`; Cloud (`https://ollama.com/v1`): OpenAI-compatible `usage.*` |
 | GLM (ZhipuAI) | Cloud | Bearer (JWT) | OpenAI-compatible |
 | MiniMax | Cloud | Bearer token | OpenAI-compatible |
 | Google Gemini | Cloud | URL param key | `usageMetadata.*TokenCount` |

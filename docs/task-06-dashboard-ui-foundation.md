@@ -152,6 +152,12 @@ contextBridge.exposeInMainWorld('api', {
 });
 ```
 
+**IPC Security Rules:**
+- **API keys NEVER cross to the renderer**. The renderer can only request key metadata (masked preview, validation status). Decryption only happens in the main process.
+- **Sensitive headers are already sanitized** by the proxy (Task 2, section 2.3a) before any IPC event is emitted. The renderer never sees raw `Authorization` headers.
+- Use `contextIsolation: true` (Electron default) — the renderer cannot access Node.js APIs directly.
+- Use `nodeIntegration: false` (Electron default) — no `require()` in renderer.
+
 ### 6.8 Implement Zustand stores
 
 File: `src/renderer/src/stores/usageStore.ts`

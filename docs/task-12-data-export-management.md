@@ -189,20 +189,63 @@ Allow users to export individual charts as PNG/SVG:
 
 File: `src/main/export/report.ts`
 
-Generate a standalone HTML report that can be shared:
+Generate a standalone HTML report that can be shared (see existing details above).
+
+### 12.10 Implement catch-up sync (ZhipuAI GLM)
+
+File: `src/main/sync/zhipuai-sync.ts`
+
+If the proxy was offline and API calls were made directly to ZhipuAI (bypassing the tracker), this feature retroactively imports usage data from ZhipuAI's monitoring API.
+
+**ZhipuAI is the only supported provider for catch-up sync** (it has the required usage query API). Ollama cloud does not yet have a usage query endpoint.
+
+**How it works:**
+1. User clicks "Sync Missing Data" in settings or the overview page
+2. The app queries ZhipuAI's `/api/monitor/usage/model-usage` endpoint for the time range since last sync
+3. Returned usage data is compared against existing `usage_logs` to find gaps
+4. Missing entries are inserted into the database (marked with `source: 'sync'` vs `source: 'proxy'`)
+5. Daily/weekly summaries are recalculated
+
+**UI:**
+- "Sync" button in the overview page and provider settings
+- Shows last sync timestamp
+- Progress indicator during sync
+- Summary after sync: "Imported 47 missing requests (12,500 tokens, $3.20)"
 
 ```typescript
-function generateHtmlReport(repository: UsageRepository, options: ExportOptions): string {
-  // Generate self-contained HTML with embedded charts (Chart.js from CDN)
-  // Includes summary, charts, and tables
-  // Looks good when opened in any browser
-  // Can be printed to PDF
+interface SyncResult {
+  providerId: string;
+  importedCount: number;
+  skippedCount: number;    // Already tracked via proxy
+  totalTokens: number;
+  totalCost: number;
+  syncRange: { start: string; end: string };
+}
+
+class ZhipuAiSync {
+  async sync(repository: UsageRepository, apiKey: string, since: string): Promise<SyncResult> {
+    const modelUsage = await this.fetchModelUsage(apiKey, since);
+    const existingLogs = repository.getUsageLogs({ providerId: 'glm', dateRange: { start: since, end: 'now' } });
+
+    // Deduplicate: skip entries already tracked by proxy
+    const missingEntries = this.findMissing(modelUsage, existingLogs);
+
+    // Insert missing entries with source: 'sync'
+    for (const entry of missingEntries) {
+      repository.insertUsageLog({ ...entry, source: 'sync' });
+    }
+
+    return { providerId: 'glm', importedCount: missingEntries.length, ... };
+  }
 }
 ```
 
-Features:
-- Self-contained HTML file (no external dependencies except Chart.js CDN)
-- Includes all charts and summary tables
+**Important notes:**
+- Synced data has lower granularity than proxy-tracked data (ZhipuAI returns aggregated 24h stats, not individual requests)
+- Synced entries are marked `source: 'sync'` in a new `source` column on `usage_logs` so the UI can distinguish them
+- The sync API uses a different auth format: `Authorization: {token}` (NO "Bearer" prefix)
+- This is a **manual** sync — the user triggers it, it doesn't run automatically
+- Only available for ZhipuAI GLM Coding Plan (`https://api.z.ai`)
 - **Includes per-model breakdown table** showing each model's tokens, cost, requests
 - **Includes aggregate total row** at top
 - Matches the app's theme (dark mode)
@@ -220,6 +263,8 @@ Features:
 - Cleanup removes records older than retention period
 - Chart image export produces readable PNG/SVG
 - HTML report is self-contained and renders correctly in browsers
+- **ZhipuAI catch-up sync imports missing data and deduplicates against proxy-tracked entries**
+- **Synced entries are marked `source: 'sync'` and distinguishable from `source: 'proxy'` entries**
 - Export respects current filters (provider, date range, etc.)
 
 ## Dependencies

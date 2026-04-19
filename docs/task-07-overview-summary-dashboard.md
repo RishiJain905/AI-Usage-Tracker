@@ -45,7 +45,8 @@ Build the main overview page — the first thing users see. It should show key m
 │ ┌─────────────────┐ │ ┌────────────────────────────┐ │
 │ │ OpenAI  45%     │ │ │ OpenAI          $12.50      │ │
 │ │ Claude  30%     │ │ │ Anthropic       $8.00       │ │
-│ │ Ollama  15%     │ │ │ Ollama          $0.00       │ │
+│ │ Ollama  15%     │ │ │ Ollama          $0.00*      │ │
+│ │                  │ │ │ * Free if local             │ │
 │ │ Gemini  10%     │ │ │ Gemini          $4.00       │ │
 │ └─────────────────┘ │ └────────────────────────────┘ │
 ├─────────────────────┴────────────────────────────────┤
@@ -53,7 +54,8 @@ Build the main overview page — the first thing users see. It should show key m
 │ ┌──────────────────────────────────────────────────┐ │
 │ │ GPT-4o     OpenAI   1,250 tok   $0.02  2 min ago│ │
 │ │ Claude 3.5 Anthropic 890 tok    $0.01  5 min ago│ │
-│ │ Llama 3.1  Ollama   2,100 tok   Free   8 min ago│ │
+│ │ Llama 3.1  Ollama   2,100 tok   Free*  8 min ago│ │
+│ │  * Cost shown when cloud Ollama configured       │ │
 │ └──────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────┘
 ```
