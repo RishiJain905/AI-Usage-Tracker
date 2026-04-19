@@ -1,0 +1,1 @@
+export {} // Database schema initialization
