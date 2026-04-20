@@ -139,6 +139,13 @@ export function registerProxyIpcHandlers(
     return repository?.getAggregateAllTimeTotal();
   });
 
+  ipcMain.handle("db:get-recent-logs", (_event, limit?: number) => {
+    return repository?.getUsageLogs({
+      limit: limit ?? 50,
+      offset: 0,
+    });
+  });
+
   ipcMain.handle("db:get-setting", (_event, key: string) => {
     return repository?.getSetting(key);
   });

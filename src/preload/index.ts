@@ -47,6 +47,8 @@ const api = {
     ipcRenderer.invoke("db:get-aggregate-weekly-total", weekStart),
   dbGetAggregateAllTimeTotal: () =>
     ipcRenderer.invoke("db:get-aggregate-all-time-total"),
+  dbGetRecentLogs: (limit?: number) =>
+    ipcRenderer.invoke("db:get-recent-logs", limit),
   dbGetSetting: (key: string) => ipcRenderer.invoke("db:get-setting", key),
   dbSetSetting: (key: string, value: string) =>
     ipcRenderer.invoke("db:set-setting", key, value),
