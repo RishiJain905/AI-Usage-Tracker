@@ -146,6 +146,10 @@ export function registerProxyIpcHandlers(
     });
   });
 
+  ipcMain.handle("db:get-models", () => {
+    return repository?.getAllModels();
+  });
+
   ipcMain.handle("db:get-setting", (_event, key: string) => {
     return repository?.getSetting(key);
   });

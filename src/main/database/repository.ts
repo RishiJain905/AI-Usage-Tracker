@@ -1019,6 +1019,38 @@ export class UsageRepository {
   }
 
   // ---------------------------------------------------------------------------
+  // Models with pricing
+  // ---------------------------------------------------------------------------
+
+  getAllModels(): Array<{
+    id: string;
+    provider_id: string;
+    name: string;
+    input_price_per_million: number;
+    output_price_per_million: number;
+    is_local: number;
+    provider_name: string;
+  }> {
+    return this.db
+      .prepare(
+        `SELECT m.id, m.provider_id, m.name, m.input_price_per_million, m.output_price_per_million, m.is_local,
+                p.name AS provider_name
+         FROM models m
+         JOIN providers p ON m.provider_id = p.id
+         ORDER BY p.name, m.name`,
+      )
+      .all() as Array<{
+      id: string;
+      provider_id: string;
+      name: string;
+      input_price_per_million: number;
+      output_price_per_million: number;
+      is_local: number;
+      provider_name: string;
+    }>;
+  }
+
+  // ---------------------------------------------------------------------------
   // Settings
   // ---------------------------------------------------------------------------
 

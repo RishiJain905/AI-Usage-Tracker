@@ -5,7 +5,7 @@ import Overview from "@/components/dashboard/Overview";
 import ByProvider from "@/components/dashboard/ByProvider";
 import ByModel from "@/components/dashboard/ByModel";
 import CostView from "@/components/dashboard/CostView";
-import UsageHistory from "@/components/dashboard/ByTime";
+import UsageHistory from "@/components/dashboard/UsageHistory";
 import Settings from "@/components/settings/Settings";
 import GeneralSettings from "@/components/settings/GeneralSettings";
 import ProviderConfig from "@/components/settings/ProviderConfig";

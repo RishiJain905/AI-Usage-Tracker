@@ -177,6 +177,27 @@ export interface WeeklySummary {
 // Per-model daily trends (keyed by model ID)
 export type ModelDailyTrends = Record<string, DailyTrend[]>;
 
+// Provider detail with per-model breakdown
+export interface ProviderDetail extends ProviderSummary {
+  models: ModelBreakdown[];
+  avgLatencyMs: number;
+  errorRate: number;
+}
+
+// Model comparison row (for the comparison table)
+export interface ModelComparisonRow {
+  model_id: string;
+  model_name: string;
+  provider_id: string;
+  provider_name: string;
+  input_price_per_million: number;
+  output_price_per_million: number;
+  total_tokens: number;
+  total_cost: number;
+  request_count: number;
+  share_of_total: number;
+}
+
 // Proxy status
 export interface ProxyStatus {
   isRunning: boolean;

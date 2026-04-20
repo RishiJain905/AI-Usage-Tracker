@@ -8,8 +8,13 @@ import type {
   DailyTrend,
   WeeklyTrend,
   ProviderSummary,
+  ProviderDetail,
   ProxyStatus,
+  UsageLog,
+  DailySummary,
+  UsageFilters,
 } from "@/types/usage";
+import type { ModelInfo } from "@/types/provider";
 
 interface UsageState {
   // Current period — CRITICAL: global state affecting ALL views
@@ -30,6 +35,14 @@ interface UsageState {
   modelDailyTrends: Record<string, DailyTrend[]>;
   topModels: ModelUsage[];
 
+  // Data — MODELS & PROVIDER DETAIL
+  models: ModelInfo[];
+  providerDetail: Record<string, ProviderDetail>;
+
+  // Data — USAGE LOGS & DAILY SUMMARIES
+  usageLogs: UsageLog[];
+  dailySummaries: DailySummary[];
+
   // Real-time
   proxyStatus: ProxyStatus | null;
   lastUpdate: Date | null;
@@ -49,6 +62,10 @@ interface UsageState {
   fetchWeeklyTrend: (weeks?: number) => Promise<void>;
   fetchModelDailyTrend: (modelId: string, days?: number) => Promise<void>;
   fetchProxyStatus: () => Promise<void>;
+  fetchModels: () => Promise<void>;
+  fetchProviderDetail: (providerId: string) => Promise<void>;
+  fetchUsageLogs: (filters: UsageFilters) => Promise<void>;
+  fetchDailySummaries: () => Promise<void>;
   fetchAll: () => Promise<void>;
   setupEventListeners: () => () => void;
   reset: () => void;
@@ -72,6 +89,12 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   allModelSummaries: [],
   modelDailyTrends: {},
   topModels: [],
+
+  models: [],
+  providerDetail: {},
+
+  usageLogs: [],
+  dailySummaries: [],
 
   proxyStatus: null,
   lastUpdate: null,
@@ -190,6 +213,109 @@ export const useUsageStore = create<UsageState>((set, get) => ({
     }
   },
 
+  fetchModels: async () => {
+    if (!api) return;
+    try {
+      const rows = await api.dbGetModels();
+      const models: ModelInfo[] = (rows ?? []).map((row) => ({
+        id: row.id,
+        providerId: row.provider_id,
+        name: row.name,
+        inputPricePerMillion: row.input_price_per_million,
+        outputPricePerMillion: row.output_price_per_million,
+        isLocal: row.is_local === 1,
+      }));
+      set({ models });
+    } catch (error) {
+      set({ error: String(error) });
+    }
+  },
+
+  fetchProviderDetail: async (providerId: string) => {
+    if (!api) return;
+    try {
+      const summary = await api.dbGetProviderSummary(providerId, get().period);
+      const allModels = get().allModelSummaries;
+      const providerModels = allModels.filter(
+        (m) => m.provider_id === providerId,
+      );
+
+      const errorRate = 0;
+      const avgLatencyMs = 0;
+
+      const detail: ProviderDetail = {
+        ...summary,
+        models: providerModels,
+        avgLatencyMs,
+        errorRate,
+      };
+      set((state) => ({
+        providerDetail: { ...state.providerDetail, [providerId]: detail },
+      }));
+    } catch (error) {
+      set({ error: String(error) });
+    }
+  },
+
+  fetchUsageLogs: async (filters: UsageFilters) => {
+    if (!api) return;
+    try {
+      const usageLogs = await api.dbGetUsageLogs(filters);
+      set({ usageLogs });
+    } catch (error) {
+      set({ error: String(error) });
+    }
+  },
+
+  fetchDailySummaries: async () => {
+    if (!api) return;
+    try {
+      const period = get().period;
+      const now = new Date();
+      let start: string;
+      let end: string;
+
+      switch (period) {
+        case "today": {
+          const y = now.getFullYear();
+          const m = String(now.getMonth() + 1).padStart(2, "0");
+          const d = String(now.getDate()).padStart(2, "0");
+          start = `${y}-${m}-${d}`;
+          end = start;
+          break;
+        }
+        case "week": {
+          const dayOfWeek = now.getDay();
+          const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+          const monday = new Date(now);
+          monday.setDate(now.getDate() + mondayOffset);
+          const sunday = new Date(monday);
+          sunday.setDate(monday.getDate() + 6);
+          start = monday.toISOString().slice(0, 10);
+          end = sunday.toISOString().slice(0, 10);
+          break;
+        }
+        case "month": {
+          const y = now.getFullYear();
+          const m = String(now.getMonth() + 1).padStart(2, "0");
+          start = `${y}-${m}-01`;
+          const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
+          end = `${y}-${m}-${String(lastDay).padStart(2, "0")}`;
+          break;
+        }
+        case "all":
+          start = "0001-01-01";
+          end = "9999-12-31";
+          break;
+      }
+
+      const dailySummaries = await api.dbGetDailySummary(start, end);
+      set({ dailySummaries });
+    } catch (error) {
+      set({ error: String(error) });
+    }
+  },
+
   fetchAll: async () => {
     const {
       fetchSummary,
@@ -200,6 +326,9 @@ export const useUsageStore = create<UsageState>((set, get) => ({
       fetchDailyTrend,
       fetchWeeklyTrend,
       fetchProxyStatus,
+      fetchModels,
+      fetchUsageLogs,
+      fetchDailySummaries,
     } = get();
     set({ isLoading: true, error: null });
     try {
@@ -212,6 +341,9 @@ export const useUsageStore = create<UsageState>((set, get) => ({
         fetchDailyTrend(),
         fetchWeeklyTrend(),
         fetchProxyStatus(),
+        fetchModels(),
+        fetchUsageLogs({ limit: 50, offset: 0 }),
+        fetchDailySummaries(),
       ]);
     } catch (error) {
       set({ error: String(error) });
@@ -256,6 +388,10 @@ export const useUsageStore = create<UsageState>((set, get) => ({
       allModelSummaries: [],
       modelDailyTrends: {},
       topModels: [],
+      models: [],
+      providerDetail: {},
+      usageLogs: [],
+      dailySummaries: [],
       proxyStatus: null,
       lastUpdate: null,
       isLoading: false,

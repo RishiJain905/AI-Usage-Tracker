@@ -14,10 +14,15 @@ export interface DisplaySettings {
   compactMode: boolean;
 }
 
+export interface BudgetSettings {
+  monthlyBudget: number; // 0 = disabled/hidden
+}
+
 export interface AppSettings {
   proxy: ProxySettings;
   display: DisplaySettings;
   providers: ProviderConfigEntry[];
+  budget: BudgetSettings;
 }
 
 export interface ProviderConfigEntry {
@@ -40,6 +45,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     compactMode: false,
   },
   providers: [],
+  budget: { monthlyBudget: 0 },
 };
 
 export const CURRENCY_OPTIONS = [

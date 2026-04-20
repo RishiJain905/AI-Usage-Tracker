@@ -49,6 +49,17 @@ const api = {
     ipcRenderer.invoke("db:get-aggregate-all-time-total"),
   dbGetRecentLogs: (limit?: number) =>
     ipcRenderer.invoke("db:get-recent-logs", limit),
+  dbGetModels: (): Promise<
+    Array<{
+      id: string;
+      provider_id: string;
+      name: string;
+      input_price_per_million: number;
+      output_price_per_million: number;
+      is_local: number;
+      provider_name: string;
+    }>
+  > => ipcRenderer.invoke("db:get-models"),
   dbGetSetting: (key: string) => ipcRenderer.invoke("db:get-setting", key),
   dbSetSetting: (key: string, value: string) =>
     ipcRenderer.invoke("db:set-setting", key, value),

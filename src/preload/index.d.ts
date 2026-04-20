@@ -213,6 +213,22 @@ interface ProxyAPI {
   dbGetAggregateWeeklyTotal: (weekStart: string) => Promise<AggregateTotal>;
   dbGetAggregateAllTimeTotal: () => Promise<AggregateTotal>;
 
+  // Database — models with pricing
+  dbGetModels: () => Promise<
+    Array<{
+      id: string;
+      provider_id: string;
+      name: string;
+      input_price_per_million: number;
+      output_price_per_million: number;
+      is_local: number;
+      provider_name: string;
+    }>
+  >;
+
+  // Database — recent logs
+  dbGetRecentLogs: (limit?: number) => Promise<UsageLog[]>;
+
   // Database — settings
   dbGetSetting: (key: string) => Promise<string | null>;
   dbSetSetting: (key: string, value: string) => Promise<boolean>;
