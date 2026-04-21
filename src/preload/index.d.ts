@@ -360,6 +360,8 @@ interface ProxyAPI {
   clearDataBefore: (before: string) => Promise<ClearBeforeDataResult>;
   clearAllData: () => Promise<ClearAllDataResult>;
   checkForUpdates: () => Promise<CheckUpdatesResult>;
+  downloadUpdate: () => Promise<{ ok: boolean; error?: string }>;
+  installUpdate: () => Promise<{ ok: boolean }>;
   openDataDirectory: (path?: string) => Promise<OpenDataDirectoryResult>;
 
   // Real-time events (Main → Renderer)
@@ -372,8 +374,76 @@ interface ProxyAPI {
   ) => () => void;
   onAppCommand: (callback: (command: AppCommand) => void) => () => void;
 
+  // Update events (Main → Renderer)
+  onUpdateAvailable: (
+    callback: (info: { version: string; releaseNotes?: unknown }) => void,
+  ) => () => void;
+  onUpdateNotAvailable: (callback: () => void) => () => void;
+  onUpdateDownloadProgress: (
+    callback: (progress: {
+      bytesPerSecond: number;
+      percent: number;
+      transferred: number;
+      total: number;
+    }) => void,
+  ) => () => void;
+  onUpdateDownloaded: (callback: () => void) => () => void;
+  onUpdateError: (callback: (error: { message: string }) => void) => () => void;
+
   // Proxy control
   toggleProxy: () => Promise<boolean>;
+
+  // Data export
+  exportCsv: (options: Record<string, unknown>) => Promise<string>;
+  exportJson: (options: Record<string, unknown>) => Promise<string>;
+  exportHtmlReport: (options: Record<string, unknown>) => Promise<string>;
+  exportSaveFile: (payload: {
+    content: string;
+    defaultName: string;
+    format: "csv" | "json" | "html" | "png" | "svg" | "db";
+  }) => Promise<{ canceled: boolean; filePath: string | null }>;
+  exportChartImage: (payload: {
+    data: string;
+    defaultName: string;
+    format: "png" | "svg";
+  }) => Promise<{ canceled: boolean; filePath: string | null }>;
+
+  // Data management
+  dataBackup: () => Promise<{
+    ok: boolean;
+    backupPath?: string;
+    error?: string;
+  }>;
+  dataRestore: (backupPath: string) => Promise<{
+    ok: boolean;
+    preRestoreBackupPath?: string;
+    restartNeeded?: boolean;
+    error?: string;
+  }>;
+  dataCleanup: (retentionDays?: number) => Promise<{
+    ok: boolean;
+    deletedCount: number;
+    retentionDays: number;
+    error?: string;
+  }>;
+
+  // ZhipuAI sync
+  syncZhipuAi: (
+    apiKey: string,
+    since?: string,
+  ) => Promise<{
+    ok: boolean;
+    result?: {
+      providerId: string;
+      importedCount: number;
+      skippedCount: number;
+      totalTokens: number;
+      totalCost: number;
+      syncRange: { start: string; end: string };
+    };
+    error?: string;
+  }>;
+  syncZhipuAiStatus: () => Promise<{ lastSyncTimestamp: string | null }>;
 }
 
 declare global {

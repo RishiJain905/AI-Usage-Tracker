@@ -35,6 +35,11 @@ const settingsNavItems: SettingsNavItem[] = [
     description: "App info and maintenance actions",
     path: "/settings/about",
   },
+  {
+    label: "Data Management",
+    description: "Export, backup, and sync",
+    path: "/settings/data",
+  },
 ];
 
 export default function Settings(): React.JSX.Element {

@@ -15,6 +15,11 @@ import {
 import { registerAllProviders } from "./proxy/providers";
 import { initDatabase, closeDatabase } from "./database";
 import { UsageRepository } from "./database/repository";
+import {
+  shouldRunCleanup,
+  getRetentionDays,
+  runCleanup,
+} from "./database/cleanup";
 import type {
   ProviderConfig,
   ProxyEvent,
@@ -35,6 +40,7 @@ import {
   type TrayModelSummary,
   type TrayUsageSnapshot,
 } from "./tray";
+import { setupAutoUpdater, setUpdaterWindow } from "./updater";
 
 const APP_SETTINGS_KEY = "app_settings";
 const PROXY_PORT_MIN = 8765;
@@ -352,7 +358,9 @@ function persistProxyEnabled(enabled: boolean): void {
     return;
   }
 
-  const current = parseStoredAppSettings(repository.getSetting(APP_SETTINGS_KEY));
+  const current = parseStoredAppSettings(
+    repository.getSetting(APP_SETTINGS_KEY),
+  );
   const next: StoredAppSettings = {
     ...current,
     proxy: {
@@ -378,18 +386,22 @@ function getBudgetSettings(): {
     };
   }
 
-  const current = parseStoredAppSettings(repository.getSetting(APP_SETTINGS_KEY));
+  const current = parseStoredAppSettings(
+    repository.getSetting(APP_SETTINGS_KEY),
+  );
   const budget = isRecord(current.budget)
     ? (current.budget as StoredBudgetSettings)
     : {};
 
   return {
     monthlyBudget:
-      typeof budget.monthlyBudget === "number" && Number.isFinite(budget.monthlyBudget)
+      typeof budget.monthlyBudget === "number" &&
+      Number.isFinite(budget.monthlyBudget)
         ? budget.monthlyBudget
         : 0,
     alertThreshold:
-      typeof budget.alertThreshold === "number" && Number.isFinite(budget.alertThreshold)
+      typeof budget.alertThreshold === "number" &&
+      Number.isFinite(budget.alertThreshold)
         ? budget.alertThreshold
         : 80,
     notificationsEnabled:
@@ -399,11 +411,13 @@ function getBudgetSettings(): {
   };
 }
 
-function toTrayAggregate(total: {
-  total_tokens?: number;
-  total_cost?: number;
-  request_count?: number;
-} | null): TrayAggregateSummary {
+function toTrayAggregate(
+  total: {
+    total_tokens?: number;
+    total_cost?: number;
+    request_count?: number;
+  } | null,
+): TrayAggregateSummary {
   return {
     totalTokens: total?.total_tokens ?? 0,
     totalCost: total?.total_cost ?? 0,
@@ -431,7 +445,9 @@ function buildTraySnapshot(): TrayUsageSnapshot {
   const today = repository?.getAggregateTotal("today") ?? null;
   const week = repository?.getAggregateTotal("week") ?? null;
   const all = repository?.getAggregateTotal("all") ?? null;
-  const topModels = (repository?.getTopModels(3, "today") ?? []).map(toTrayModel);
+  const topModels = (repository?.getTopModels(3, "today") ?? []).map(
+    toTrayModel,
+  );
 
   return {
     today: toTrayAggregate(today),
@@ -478,7 +494,10 @@ function notifyBudgetThreshold(totalCost: number, monthlyBudget: number): void {
   });
 }
 
-function notifyProviderConnectionError(providerId: string, message: string): void {
+function notifyProviderConnectionError(
+  providerId: string,
+  message: string,
+): void {
   showTrayNotification({
     title: "Provider connection error",
     body: `${providerId}: ${message}`,
@@ -829,12 +848,35 @@ function registerGlobalShortcuts(): void {
 async function initializeApp(): Promise<void> {
   electronApp.setAppUserModelId("com.terratch.ai-usage-tracker");
 
+  app.setAboutPanelOptions({
+    applicationName: "AI Usage Tracker",
+    applicationVersion: app.getVersion(),
+    copyright: "Copyright © 2024 TerraWatch",
+    authors: ["TerraWatch"],
+    website: "https://github.com/terratch/ai-usage-tracker",
+  });
+
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window);
   });
 
   db = initDatabase(app.getPath("userData"));
   repository = new UsageRepository(db);
+
+  // Run scheduled cleanup on startup if auto-cleanup is enabled
+  if (shouldRunCleanup(repository)) {
+    try {
+      const retentionDays = getRetentionDays(repository);
+      const deletedCount = runCleanup(repository, retentionDays);
+      if (deletedCount > 0) {
+        console.info(
+          `[Main] Auto-cleanup removed ${deletedCount} old usage log(s).`,
+        );
+      }
+    } catch (cleanupError) {
+      console.error("[Main] Auto-cleanup failed:", cleanupError);
+    }
+  }
 
   const pricingStore = loadPricingStore(repository);
   const costCalculator = new CostCalculator(pricingStore);
@@ -929,12 +971,36 @@ async function initializeApp(): Promise<void> {
 
   refreshTraySnapshot();
   startTrayRefreshTimer();
+
+  // Schedule daily cleanup (runs every 24 hours if auto-cleanup is enabled)
+  setInterval(
+    () => {
+      if (repository && shouldRunCleanup(repository)) {
+        try {
+          const retentionDays = getRetentionDays(repository);
+          const deletedCount = runCleanup(repository, retentionDays);
+          if (deletedCount > 0) {
+            console.info(
+              `[Main] Daily cleanup removed ${deletedCount} old usage log(s).`,
+            );
+          }
+        } catch (cleanupError) {
+          console.error("[Main] Daily cleanup failed:", cleanupError);
+        }
+      }
+    },
+    24 * 60 * 60 * 1000,
+  );
+
   attachProxyEventListeners(tokenExtractor, costCalculator);
 
   const autoLaunchEnabled = syncAutoLaunchFromEnv();
   createWindow(!autoLaunchEnabled);
+  setUpdaterWindow(mainWindow);
 
   registerGlobalShortcuts();
+
+  setupAutoUpdater();
 
   app.on("activate", () => {
     showMainWindow();
@@ -946,7 +1012,6 @@ async function initializeApp(): Promise<void> {
       void requestAppQuit();
     }
   });
-
 }
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();

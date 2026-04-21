@@ -42,6 +42,20 @@ vi.mock("../security/encryption", () => ({
   decryptKey: vi.fn((key: string) => key.replace(/^enc:/, "")),
 }));
 
+vi.mock("../updater", () => ({
+  setupAutoUpdater: vi.fn(),
+  setUpdaterWindow: vi.fn(),
+  checkForUpdates: vi.fn(async () => ({
+    ok: true,
+    available: false,
+    currentVersion: "1.0.0",
+    latestVersion: null,
+    checkedAt: new Date().toISOString(),
+  })),
+  downloadUpdate: vi.fn(async () => ({ ok: true })),
+  installUpdate: vi.fn(),
+}));
+
 import { decryptKey, encryptKey } from "../security/encryption";
 import {
   registerProxyIpcHandlers,

@@ -69,8 +69,20 @@ Every metric, chart, and table must respect the global **period selector**:
 | 11 | [System Tray & Background Operation](task-11-system-tray-background.md) | 02, 06 | 2-3h |
 | 12 | [Data Export & Management](task-12-data-export-management.md) | 04, 09, 10 | 3-4h |
 | 13 | [Packaging, Build & Distribution](task-13-packaging-build-distribution.md) | All | 3-4h |
+| 14 | [Build Verification, E2E Test & First Release](task-14-build-e2e-release.md) | 13 | 3-4h |
+| 15 | [Quality Assurance, Documentation & Final Polish](task-15-polish-documentation.md) | 14 | 4-6h |
 
-**Total Estimated Time: ~47-60 hours**
+**Total Estimated Time: ~54-70 hours**
+
+### Deployment Readiness
+
+| Phase | Tasks | Status |
+|-------|-------|--------|
+| Feature Development | 01-13 | Done |
+| Build & Release | 14 | Ready for execution |
+| Final Polish & QA | 15 | Ready for execution |
+
+After Task 15, the app is **production-ready** for official deployment.
 
 ---
 

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { dirname, extname } from "path";
 import { PROVIDER_ROUTES } from "../proxy/routing";
 import type { ProxyServer } from "../proxy/server";
@@ -174,8 +174,8 @@ function resolveOpenDataDirectoryTarget(payload: unknown): string {
     typeof payload === "string"
       ? payload
       : payload && typeof payload === "object"
-        ? (payload as { path?: unknown; databasePath?: unknown }).path ??
-          (payload as { path?: unknown; databasePath?: unknown }).databasePath
+        ? ((payload as { path?: unknown; databasePath?: unknown }).path ??
+          (payload as { path?: unknown; databasePath?: unknown }).databasePath)
         : null;
 
   if (typeof candidate !== "string" || candidate.trim().length === 0) {
@@ -320,10 +320,9 @@ function buildApiKeyListMetadata(
 ): ApiKeyListMetadata[] {
   const runtimeProviders = getRuntimeSnapshot(repo, runtimeBridge).providers;
   const metadataByProvider = new Map(
-    repo.listApiKeyMetadata().map((metadata) => [
-      metadata.provider_id,
-      metadata,
-    ]),
+    repo
+      .listApiKeyMetadata()
+      .map((metadata) => [metadata.provider_id, metadata]),
   );
 
   return runtimeProviders.map((provider) => {
@@ -722,17 +721,21 @@ export function registerProxyIpcHandlers(
         ? payload.trim()
         : payload && typeof payload === "object"
           ? (() => {
-              const candidate = (payload as {
-                before?: unknown;
-                date?: unknown;
-              }).before;
+              const candidate = (
+                payload as {
+                  before?: unknown;
+                  date?: unknown;
+                }
+              ).before;
               if (typeof candidate === "string") {
                 return candidate.trim();
               }
-              const fallback = (payload as {
-                before?: unknown;
-                date?: unknown;
-              }).date;
+              const fallback = (
+                payload as {
+                  before?: unknown;
+                  date?: unknown;
+                }
+              ).date;
               return typeof fallback === "string" ? fallback.trim() : "";
             })()
           : "";
@@ -788,14 +791,23 @@ export function registerProxyIpcHandlers(
 
   ipcMain.handle("data:clear-all", clearAllDataHandler);
 
-  ipcMain.handle("app:check-updates", () => {
-    return {
-      ok: true,
-      available: false,
-      currentVersion: app.getVersion(),
-      latestVersion: null,
-      checkedAt: new Date().toISOString(),
-    };
+  ipcMain.handle("app:check-updates", async () => {
+    const { checkForUpdates: checkForUpdatesViaUpdater } =
+      await import("../updater");
+    return checkForUpdatesViaUpdater();
+  });
+
+  ipcMain.handle("app:download-update", async () => {
+    const { downloadUpdate: downloadUpdateViaUpdater } =
+      await import("../updater");
+    return downloadUpdateViaUpdater();
+  });
+
+  ipcMain.handle("app:install-update", async () => {
+    const { installUpdate: installUpdateViaUpdater } =
+      await import("../updater");
+    installUpdateViaUpdater();
+    return { ok: true };
   });
 
   ipcMain.handle("app:open-data-directory", (_event, payload: unknown) => {
@@ -953,6 +965,246 @@ export function registerProxyIpcHandlers(
       console.error("[IPC] proxy:toggle failed:", err);
       return false;
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Data export handlers
+  // ---------------------------------------------------------------------------
+
+  ipcMain.handle(
+    "export:csv",
+    (_event, options: import("../export/csv").CsvExportOptions) => {
+      if (!repository) return "";
+      const { exportToCsv } =
+        require("../export/csv") as typeof import("../export/csv");
+      return exportToCsv(repository, options);
+    },
+  );
+
+  ipcMain.handle(
+    "export:json",
+    (_event, options: import("../export/json").JsonExportOptions) => {
+      if (!repository) return "{}";
+      const { exportToJson } =
+        require("../export/json") as typeof import("../export/json");
+      return exportToJson(repository, options);
+    },
+  );
+
+  ipcMain.handle(
+    "export:html-report",
+    (_event, options: import("../export/report").ReportOptions) => {
+      if (!repository) return "";
+      const { generateHtmlReport } =
+        require("../export/report") as typeof import("../export/report");
+      return generateHtmlReport(repository, options);
+    },
+  );
+
+  ipcMain.handle(
+    "export:save-file",
+    async (
+      _event,
+      payload: {
+        content: string;
+        defaultName: string;
+        format: "csv" | "json" | "html" | "png" | "svg" | "db";
+      },
+    ) => {
+      const result = await dialog.showSaveDialog({
+        title: "Export Usage Data",
+        defaultPath: payload.defaultName,
+        filters: [
+          { name: payload.format.toUpperCase(), extensions: [payload.format] },
+          { name: "All Files", extensions: ["*"] },
+        ],
+      });
+
+      if (result.canceled || !result.filePath) {
+        return { canceled: true, filePath: null };
+      }
+
+      const fs = await import("fs");
+      fs.writeFileSync(result.filePath, payload.content, "utf-8");
+      return { canceled: false, filePath: result.filePath };
+    },
+  );
+
+  ipcMain.handle(
+    "export:chart-image",
+    async (
+      _event,
+      payload: { data: string; defaultName: string; format: "png" | "svg" },
+    ) => {
+      const result = await dialog.showSaveDialog({
+        title: "Save Chart Image",
+        defaultPath: payload.defaultName,
+        filters: [
+          { name: payload.format.toUpperCase(), extensions: [payload.format] },
+          { name: "All Files", extensions: ["*"] },
+        ],
+      });
+
+      if (result.canceled || !result.filePath) {
+        return { canceled: true, filePath: null };
+      }
+
+      const fs = await import("fs");
+      if (payload.format === "svg") {
+        fs.writeFileSync(result.filePath, payload.data, "utf-8");
+      } else {
+        const buffer = Buffer.from(payload.data, "base64");
+        fs.writeFileSync(result.filePath, buffer);
+      }
+      return { canceled: false, filePath: result.filePath };
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // Data management handlers
+  // ---------------------------------------------------------------------------
+
+  ipcMain.handle("data:backup", async () => {
+    if (!repository) {
+      return { ok: false, error: "Repository not available." };
+    }
+
+    try {
+      const { getBackupFilePath, rotateBackups, backupDatabase } =
+        require("../export/backup") as typeof import("../export/backup");
+      const appDataPath = app.getPath("userData");
+      const backupPath = getBackupFilePath(appDataPath);
+
+      const { getDatabase } =
+        require("../database") as typeof import("../database");
+      const db = getDatabase();
+      await backupDatabase(db, backupPath);
+
+      const backupDir = dirname(backupPath);
+      rotateBackups(backupDir, 5);
+
+      return { ok: true, backupPath };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : "Unknown backup error",
+      };
+    }
+  });
+
+  ipcMain.handle(
+    "data:restore",
+    async (_event, payload: { backupPath: string }) => {
+      const { validateBackup } =
+        require("../export/restore") as typeof import("../export/restore");
+
+      if (!validateBackup(payload.backupPath)) {
+        return { ok: false, error: "Invalid backup file." };
+      }
+
+      try {
+        const appDataPath = app.getPath("userData");
+        const pathModule = await import("path");
+        const dbPath = pathModule.join(appDataPath, "ai-usage-tracker.db");
+
+        const { backupDatabase } =
+          require("../export/backup") as typeof import("../export/backup");
+        const fs = await import("fs");
+        const preRestoreBackupPath = pathModule.join(
+          appDataPath,
+          "backups",
+          `pre-restore-${new Date().toISOString().replace(/[:.]/g, "-")}.db`,
+        );
+
+        const preRestoreDir = pathModule.dirname(preRestoreBackupPath);
+        if (!fs.existsSync(preRestoreDir)) {
+          fs.mkdirSync(preRestoreDir, { recursive: true });
+        }
+
+        const { getDatabase } =
+          require("../database") as typeof import("../database");
+        const db = getDatabase();
+        await backupDatabase(db, preRestoreBackupPath);
+
+        fs.copyFileSync(payload.backupPath, dbPath);
+
+        return { ok: true, preRestoreBackupPath, restartNeeded: true };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Unknown restore error",
+        };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    "data:cleanup",
+    (_event, payload: { retentionDays?: number }) => {
+      if (!repository) {
+        return {
+          ok: false,
+          error: "Repository not available.",
+          deletedCount: 0,
+        };
+      }
+
+      try {
+        const { runCleanup, getRetentionDays } =
+          require("../database/cleanup") as typeof import("../database/cleanup");
+        const retentionDays =
+          payload.retentionDays ?? getRetentionDays(repository);
+        const deletedCount = runCleanup(repository, retentionDays);
+        return { ok: true, deletedCount, retentionDays };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Unknown cleanup error",
+          deletedCount: 0,
+        };
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // ZhipuAI sync handlers
+  // ---------------------------------------------------------------------------
+
+  ipcMain.handle(
+    "sync:zhipuai",
+    async (_event, payload: { apiKey: string; since?: string }) => {
+      if (!repository) {
+        return { ok: false, error: "Repository not available.", result: null };
+      }
+
+      try {
+        const { ZhipuAiSync } =
+          require("../sync/zhipuai-sync") as typeof import("../sync/zhipuai-sync");
+        const syncer = new ZhipuAiSync();
+        const since =
+          payload.since ??
+          repository.getSetting("last_sync_zhipuai") ??
+          new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .slice(0, 10);
+        const result = await syncer.sync(repository, payload.apiKey, since);
+        return { ok: true, result };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Unknown sync error",
+          result: null,
+        };
+      }
+    },
+  );
+
+  ipcMain.handle("sync:zhipuai-status", () => {
+    if (!repository) {
+      return { lastSyncTimestamp: null };
+    }
+    const lastSync = repository.getSetting("last_sync_zhipuai");
+    return { lastSyncTimestamp: lastSync };
   });
 }
 

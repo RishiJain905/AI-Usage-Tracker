@@ -9,6 +9,8 @@ import path from "path";
 import { runMigrations } from "./migrations";
 import { seedDatabase } from "./seed";
 
+let _currentDb: Database.Database | null = null;
+
 /**
  * Open and initialise the database.
  *
@@ -39,12 +41,25 @@ export function initDatabase(userDataPath: string): Database.Database {
   // Seed reference data (providers + models) — idempotent via INSERT OR IGNORE
   seedDatabase(db);
 
+  _currentDb = db;
   return db;
+}
+
+/**
+ * Get the current database instance.
+ * Returns null if the database has not been initialized yet.
+ */
+export function getDatabase(): Database.Database {
+  if (!_currentDb) {
+    throw new Error("Database not initialized. Call initDatabase() first.");
+  }
+  return _currentDb;
 }
 
 /**
  * Gracefully close the database connection.
  */
 export function closeDatabase(db: Database.Database): void {
+  _currentDb = null;
   db.close();
 }

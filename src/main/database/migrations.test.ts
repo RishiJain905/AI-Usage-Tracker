@@ -101,7 +101,7 @@ describe("Migrations", () => {
       const rows = db
         .prepare("SELECT COUNT(*) AS cnt FROM migrations")
         .get() as { cnt: number };
-      expect(rows.cnt).toBe(2);
+      expect(rows.cnt).toBe(3);
     });
 
     it("should not fail when there are no pending migrations", () => {
@@ -125,7 +125,7 @@ describe("Migrations", () => {
     it("should return applied versions after running migrations", () => {
       runMigrations(db);
       const versions = getAppliedVersions(db);
-      expect(versions).toEqual([1, 2]);
+      expect(versions).toEqual([1, 2, 3]);
     });
   });
 

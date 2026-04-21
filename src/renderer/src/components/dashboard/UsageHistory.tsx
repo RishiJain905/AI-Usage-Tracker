@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  FileText,
+  FileJson,
+  FileSpreadsheet,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+} from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { useUsageStore } from "@/stores/usageStore";
 import PeriodSelector from "@/components/dashboard/PeriodSelector";
@@ -23,8 +33,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { formatCost, formatTokens } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { UsageLog } from "@/types/usage";
 
 const ROWS_PER_PAGE = 50;
@@ -77,6 +96,15 @@ export default function UsageHistory(): React.JSX.Element {
   // Expanded row state
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const focusSearchRequestedRef = useRef(false);
+
+  // Export state
+  const [isExporting, setIsExporting] = useState(false);
+  const [csvGroupByModel, setCsvGroupByModel] = useState(false);
+  const [csvIncludeTotal, setCsvIncludeTotal] = useState(false);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [exportTone, setExportTone] = useState<"success" | "error" | null>(
+    null,
+  );
 
   // Derive distinct providers from logs
   const distinctProviders = useMemo(() => {
@@ -166,6 +194,79 @@ export default function UsageHistory(): React.JSX.Element {
     setExpandedRow((prev) => (prev === id ? null : id));
   }, []);
 
+  const runExport = useCallback(
+    async (type: "csv" | "json" | "summary" | "html"): Promise<void> => {
+      setIsExporting(true);
+      setExportMessage(null);
+      setExportTone(null);
+      try {
+        let content: string;
+        let defaultName: string;
+        let format: "csv" | "json" | "html";
+
+        const baseOptions: Record<string, unknown> = {
+          period,
+          ...(providerFilter !== "all" && { providerId: providerFilter }),
+          ...(modelFilter !== "all" && { modelId: modelFilter }),
+        };
+
+        switch (type) {
+          case "csv": {
+            const options = {
+              ...baseOptions,
+              ...(csvGroupByModel && { groupByModel: true }),
+              ...(csvIncludeTotal && { includeTotal: true }),
+            };
+            content = await window.api.exportCsv(options);
+            defaultName = `usage-${period}.csv`;
+            format = "csv";
+            break;
+          }
+          case "json": {
+            content = await window.api.exportJson(baseOptions);
+            defaultName = `usage-${period}.json`;
+            format = "json";
+            break;
+          }
+          case "summary": {
+            const options = {
+              ...baseOptions,
+              includeSummary: true,
+              includePerModelSummary: true,
+              includeLogs: false,
+            };
+            content = await window.api.exportJson(options);
+            defaultName = `usage-summary-${period}.json`;
+            format = "json";
+            break;
+          }
+          case "html": {
+            content = await window.api.exportHtmlReport(baseOptions);
+            defaultName = `usage-report-${period}.html`;
+            format = "html";
+            break;
+          }
+        }
+
+        const result = await window.api.exportSaveFile({
+          content,
+          defaultName,
+          format,
+        });
+        if (!result.canceled && result.filePath) {
+          setExportTone("success");
+          setExportMessage(`Saved to ${result.filePath}`);
+        }
+      } catch (err) {
+        setExportTone("error");
+        setExportMessage(`Export failed: ${String(err)}`);
+      } finally {
+        setIsExporting(false);
+      }
+    },
+    [period, providerFilter, modelFilter, csvGroupByModel, csvIncludeTotal],
+  );
+
   useEffect(() => {
     const state = location.state as HistoryLocationState | null;
     if (state?.focusSearch) {
@@ -227,8 +328,85 @@ export default function UsageHistory(): React.JSX.Element {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold tracking-tight">Usage History</h1>
-          <PeriodSelector period={period} onChange={setPeriod} />
+          <div className="flex items-center gap-2">
+            <PeriodSelector period={period} onChange={setPeriod} />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={isExporting}>
+                  {isExporting ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Download className="size-4" />
+                  )}
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuCheckboxItem
+                  checked={csvGroupByModel}
+                  onCheckedChange={setCsvGroupByModel}
+                  disabled={isExporting}
+                >
+                  Group by Model
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={csvIncludeTotal}
+                  onCheckedChange={setCsvIncludeTotal}
+                  disabled={isExporting}
+                >
+                  Include Total Row
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => void runExport("csv")}
+                  disabled={isExporting}
+                >
+                  <FileSpreadsheet className="mr-2 size-4" />
+                  Export as CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => void runExport("json")}
+                  disabled={isExporting}
+                >
+                  <FileJson className="mr-2 size-4" />
+                  Export as JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => void runExport("summary")}
+                  disabled={isExporting}
+                >
+                  <FileJson className="mr-2 size-4" />
+                  Export Summary (JSON)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => void runExport("html")}
+                  disabled={isExporting}
+                >
+                  <FileText className="mr-2 size-4" />
+                  Export HTML Report
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
+        {exportMessage && (
+          <div
+            className={cn(
+              "flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
+              exportTone === "success" &&
+                "border-emerald-300 bg-emerald-50 text-emerald-700",
+              exportTone === "error" &&
+                "border-destructive/40 bg-destructive/10 text-destructive",
+            )}
+          >
+            {exportTone === "success" ? (
+              <CheckCircle2 className="size-4" />
+            ) : (
+              <AlertCircle className="size-4" />
+            )}
+            <span>{exportMessage}</span>
+          </div>
+        )}
         <EmptyState
           title="No usage history"
           description="Start making API requests through the proxy to see them here."
@@ -242,8 +420,86 @@ export default function UsageHistory(): React.JSX.Element {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Usage History</h1>
-        <PeriodSelector period={period} onChange={setPeriod} />
+        <div className="flex items-center gap-2">
+          <PeriodSelector period={period} onChange={setPeriod} />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" disabled={isExporting}>
+                {isExporting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Download className="size-4" />
+                )}
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuCheckboxItem
+                checked={csvGroupByModel}
+                onCheckedChange={setCsvGroupByModel}
+                disabled={isExporting}
+              >
+                Group by Model
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={csvIncludeTotal}
+                onCheckedChange={setCsvIncludeTotal}
+                disabled={isExporting}
+              >
+                Include Total Row
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => void runExport("csv")}
+                disabled={isExporting}
+              >
+                <FileSpreadsheet className="mr-2 size-4" />
+                Export as CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => void runExport("json")}
+                disabled={isExporting}
+              >
+                <FileJson className="mr-2 size-4" />
+                Export as JSON
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => void runExport("summary")}
+                disabled={isExporting}
+              >
+                <FileJson className="mr-2 size-4" />
+                Export Summary (JSON)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => void runExport("html")}
+                disabled={isExporting}
+              >
+                <FileText className="mr-2 size-4" />
+                Export HTML Report
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
+
+      {exportMessage && (
+        <div
+          className={cn(
+            "flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
+            exportTone === "success" &&
+              "border-emerald-300 bg-emerald-50 text-emerald-700",
+            exportTone === "error" &&
+              "border-destructive/40 bg-destructive/10 text-destructive",
+          )}
+        >
+          {exportTone === "success" ? (
+            <CheckCircle2 className="size-4" />
+          ) : (
+            <AlertCircle className="size-4" />
+          )}
+          <span>{exportMessage}</span>
+        </div>
+      )}
 
       {isLoading && usageLogs.length === 0 ? (
         <LoadingSpinner size="lg" message="Loading usage history…" />

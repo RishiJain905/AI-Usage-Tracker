@@ -1,4 +1,4 @@
-export { initDatabase, closeDatabase } from "./init";
+export { initDatabase, closeDatabase, getDatabase } from "./init";
 export {
   UsageRepository,
   createRepository,

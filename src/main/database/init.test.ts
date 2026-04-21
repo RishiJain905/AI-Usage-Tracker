@@ -125,7 +125,7 @@ describe("initDatabase", () => {
     const migrations = db
       .prepare("SELECT COUNT(*) AS cnt FROM migrations")
       .get() as { cnt: number };
-    expect(migrations.cnt).toBe(2); // v1 + v2
+    expect(migrations.cnt).toBe(3); // v1 + v2 + v3
   });
 });
 

@@ -17,6 +17,7 @@ import GeneralSettings from "@/components/settings/GeneralSettings";
 import ProviderConfig from "@/components/settings/ProviderConfig";
 import ApiKeyManager from "@/components/settings/ApiKeyManager";
 import About from "@/components/settings/About";
+import DataManagement from "@/components/settings/DataManagement";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useUsageStore } from "@/stores/usageStore";
 
@@ -157,6 +158,7 @@ function AppShell(): React.JSX.Element {
           <Route path="providers" element={<ProviderConfig />} />
           <Route path="api-keys" element={<ApiKeyManager />} />
           <Route path="about" element={<About />} />
+          <Route path="data" element={<DataManagement />} />
           <Route path="*" element={<Navigate to="general" replace />} />
         </Route>
       </Route>

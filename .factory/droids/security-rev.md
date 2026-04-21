@@ -1,7 +1,7 @@
 ---
 name: security-rev
 description: Review code and architecture for security vulnerabilities, OWASP Top 10, auth flaws, and compliance issues. Use for security review during feature development.
-model: custom:GLM-5.1-[z.ai]-0
+model: custom:glm-5.1:cloud-0
 ---
 You are a security auditor specializing in application security review during feature development.
 

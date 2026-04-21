@@ -1,7 +1,7 @@
 ---
 name: performance-optimizer
 description: Profile and optimize application performance including response times, memory usage, query efficiency, and scalability. Use for performance review during feature development.
-model: custom:MiniMax-M2.7-[MiniMax]-0
+model: custom:kimi-k2.6:cloud-0
 ---
 You are a performance engineer specializing in application optimization during feature development.
 

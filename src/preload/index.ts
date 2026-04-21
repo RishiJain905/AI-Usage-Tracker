@@ -150,9 +150,8 @@ const api = {
       authMode?: "passthrough" | "inject";
     }>;
   }) => ipcRenderer.invoke("settings:update-runtime", payload),
-  listApiKeyMetadata: (): Promise<
-    ApiKeyMetadata[]
-  > => ipcRenderer.invoke("api-key:list"),
+  listApiKeyMetadata: (): Promise<ApiKeyMetadata[]> =>
+    ipcRenderer.invoke("api-key:list"),
   setApiKey: (payload: {
     providerId: string;
     apiKey: string;
@@ -171,6 +170,10 @@ const api = {
     ipcRenderer.invoke("data:clear-all"),
   checkForUpdates: (): Promise<CheckUpdatesResult> =>
     ipcRenderer.invoke("app:check-updates"),
+  downloadUpdate: (): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke("app:download-update"),
+  installUpdate: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke("app:install-update"),
   openDataDirectory: (path?: string): Promise<OpenDataDirectoryResult> =>
     ipcRenderer.invoke("app:open-data-directory", path),
 
@@ -208,8 +211,89 @@ const api = {
     return () => ipcRenderer.removeListener("app-command", handler);
   },
 
+  // Update events (Main → Renderer)
+  onUpdateAvailable: (
+    callback: (info: { version: string; releaseNotes?: unknown }) => void,
+  ) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      info: { version: string; releaseNotes?: unknown },
+    ) => callback(info);
+    ipcRenderer.on("update-available", handler);
+    return () => ipcRenderer.removeListener("update-available", handler);
+  },
+  onUpdateNotAvailable: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on("update-not-available", handler);
+    return () => ipcRenderer.removeListener("update-not-available", handler);
+  },
+  onUpdateDownloadProgress: (
+    callback: (progress: {
+      bytesPerSecond: number;
+      percent: number;
+      transferred: number;
+      total: number;
+    }) => void,
+  ) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      progress: {
+        bytesPerSecond: number;
+        percent: number;
+        transferred: number;
+        total: number;
+      },
+    ) => callback(progress);
+    ipcRenderer.on("update-download-progress", handler);
+    return () =>
+      ipcRenderer.removeListener("update-download-progress", handler);
+  },
+  onUpdateDownloaded: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on("update-downloaded", handler);
+    return () => ipcRenderer.removeListener("update-downloaded", handler);
+  },
+  onUpdateError: (callback: (error: { message: string }) => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      error: { message: string },
+    ) => callback(error);
+    ipcRenderer.on("update-error", handler);
+    return () => ipcRenderer.removeListener("update-error", handler);
+  },
+
   // Proxy control
   toggleProxy: (): Promise<boolean> => ipcRenderer.invoke("proxy:toggle"),
+
+  // Data export
+  exportCsv: (options: Record<string, unknown>) =>
+    ipcRenderer.invoke("export:csv", options),
+  exportJson: (options: Record<string, unknown>) =>
+    ipcRenderer.invoke("export:json", options),
+  exportHtmlReport: (options: Record<string, unknown>) =>
+    ipcRenderer.invoke("export:html-report", options),
+  exportSaveFile: (payload: {
+    content: string;
+    defaultName: string;
+    format: "csv" | "json" | "html" | "png" | "svg" | "db";
+  }) => ipcRenderer.invoke("export:save-file", payload),
+  exportChartImage: (payload: {
+    data: string;
+    defaultName: string;
+    format: "png" | "svg";
+  }) => ipcRenderer.invoke("export:chart-image", payload),
+
+  // Data management
+  dataBackup: () => ipcRenderer.invoke("data:backup"),
+  dataRestore: (backupPath: string) =>
+    ipcRenderer.invoke("data:restore", { backupPath }),
+  dataCleanup: (retentionDays?: number) =>
+    ipcRenderer.invoke("data:cleanup", { retentionDays }),
+
+  // ZhipuAI sync
+  syncZhipuAi: (apiKey: string, since?: string) =>
+    ipcRenderer.invoke("sync:zhipuai", { apiKey, since }),
+  syncZhipuAiStatus: () => ipcRenderer.invoke("sync:zhipuai-status"),
 };
 
 if (process.contextIsolated) {
