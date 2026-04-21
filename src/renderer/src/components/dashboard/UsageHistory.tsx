@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { useUsageStore } from "@/stores/usageStore";
 import PeriodSelector from "@/components/dashboard/PeriodSelector";
 import { ErrorState } from "@/components/ui/error-state";
@@ -28,6 +29,10 @@ import type { UsageLog } from "@/types/usage";
 
 const ROWS_PER_PAGE = 50;
 
+type HistoryLocationState = {
+  focusSearch?: boolean;
+};
+
 /** Format latency from milliseconds to human-readable string */
 function formatLatency(ms: number | null): string {
   if (ms === null || ms === undefined) return "—";
@@ -49,6 +54,7 @@ function formatTime(isoString: string): string {
 }
 
 export default function UsageHistory(): React.JSX.Element {
+  const location = useLocation();
   const period = useUsageStore((s) => s.period);
   const setPeriod = useUsageStore((s) => s.setPeriod);
   const usageLogs = useUsageStore((s) => s.usageLogs);
@@ -70,6 +76,7 @@ export default function UsageHistory(): React.JSX.Element {
 
   // Expanded row state
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const focusSearchRequestedRef = useRef(false);
 
   // Derive distinct providers from logs
   const distinctProviders = useMemo(() => {
@@ -159,6 +166,34 @@ export default function UsageHistory(): React.JSX.Element {
     setExpandedRow((prev) => (prev === id ? null : id));
   }, []);
 
+  useEffect(() => {
+    const state = location.state as HistoryLocationState | null;
+    if (state?.focusSearch) {
+      focusSearchRequestedRef.current = true;
+    }
+  }, [location.state]);
+
+  useEffect(() => {
+    if (!focusSearchRequestedRef.current) {
+      return;
+    }
+
+    const searchInput = document.getElementById(
+      "usage-history-search",
+    ) as HTMLInputElement | null;
+
+    if (searchInput) {
+      searchInput.focus();
+      searchInput.select();
+      focusSearchRequestedRef.current = false;
+      return;
+    }
+
+    if (!isLoading && usageLogs.length === 0) {
+      focusSearchRequestedRef.current = false;
+    }
+  }, [isLoading, location.pathname, location.state, usageLogs.length]);
+
   // Initial fetch and event listeners
   useEffect(() => {
     fetchAll();
@@ -217,6 +252,7 @@ export default function UsageHistory(): React.JSX.Element {
           {/* Filter bar */}
           <div className="flex flex-wrap items-center gap-3">
             <Input
+              id="usage-history-search"
               placeholder="Search model, endpoint..."
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}

@@ -215,6 +215,16 @@ interface OpenDataDirectoryResult {
   error?: string;
 }
 
+type AppCommand =
+  | "navigate-overview"
+  | "navigate-providers"
+  | "navigate-models"
+  | "navigate-cost"
+  | "navigate-history"
+  | "navigate-settings"
+  | "refresh"
+  | "focus-history-search";
+
 interface RuntimeProviderSettings {
   providerId: string;
   providerName: string;
@@ -360,6 +370,7 @@ interface ProxyAPI {
   onProviderError: (
     callback: (error: { providerId: string; message: string }) => void,
   ) => () => void;
+  onAppCommand: (callback: (command: AppCommand) => void) => () => void;
 
   // Proxy control
   toggleProxy: () => Promise<boolean>;

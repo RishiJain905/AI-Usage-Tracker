@@ -49,6 +49,16 @@ interface OpenDataDirectoryResult {
   error?: string;
 }
 
+type AppCommand =
+  | "navigate-overview"
+  | "navigate-providers"
+  | "navigate-models"
+  | "navigate-cost"
+  | "navigate-history"
+  | "navigate-settings"
+  | "refresh"
+  | "focus-history-search";
+
 const api = {
   getProxyStatus: (): Promise<{ isRunning: boolean; port: number | null }> =>
     ipcRenderer.invoke("proxy:get-status"),
@@ -166,23 +176,36 @@ const api = {
 
   // Real-time events (Main → Renderer)
   onUsageUpdated: (callback: (data: unknown) => void) => {
-    ipcRenderer.on("usage-updated", (_event, data) => callback(data));
-    return () =>
-      ipcRenderer.removeListener("usage-updated", (_event, data) =>
-        callback(data),
-      );
+    const handler = (_event: Electron.IpcRendererEvent, data: unknown) =>
+      callback(data);
+    ipcRenderer.on("usage-updated", handler);
+    return () => ipcRenderer.removeListener("usage-updated", handler);
   },
   onProxyStatus: (
     callback: (status: { isRunning: boolean; port: number | null }) => void,
   ) => {
-    ipcRenderer.on("proxy-status", (_event, status) => callback(status));
-    return () => ipcRenderer.removeListener("proxy-status", () => {});
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      status: { isRunning: boolean; port: number | null },
+    ) => callback(status);
+    ipcRenderer.on("proxy-status", handler);
+    return () => ipcRenderer.removeListener("proxy-status", handler);
   },
   onProviderError: (
     callback: (error: { providerId: string; message: string }) => void,
   ) => {
-    ipcRenderer.on("provider-error", (_event, error) => callback(error));
-    return () => ipcRenderer.removeListener("provider-error", () => {});
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      error: { providerId: string; message: string },
+    ) => callback(error);
+    ipcRenderer.on("provider-error", handler);
+    return () => ipcRenderer.removeListener("provider-error", handler);
+  },
+  onAppCommand: (callback: (command: AppCommand) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, command: AppCommand) =>
+      callback(command);
+    ipcRenderer.on("app-command", handler);
+    return () => ipcRenderer.removeListener("app-command", handler);
   },
 
   // Proxy control
