@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FolderOpen, RefreshCcw } from "lucide-react";
+import { FolderOpen, RefreshCcw, Download, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 
 interface AboutMetadata {
   appVersion: string;
@@ -16,6 +17,22 @@ interface AboutMetadata {
   databaseSizeBytes: number | null;
   license: string;
 }
+
+interface DownloadProgress {
+  bytesPerSecond: number;
+  percent: number;
+  transferred: number;
+  total: number;
+}
+
+type UpdaterState =
+  | "idle"
+  | "checking"
+  | "available"
+  | "downloading"
+  | "downloaded"
+  | "not-available"
+  | "error";
 
 function parseByteCount(value: string | null): number | null {
   if (!value) return null;
@@ -33,6 +50,13 @@ function formatBytes(value: number | null): string {
   return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
+function formatSpeed(bytesPerSecond: number): string {
+  if (bytesPerSecond < 1024) return `${bytesPerSecond.toFixed(0)} B/s`;
+  if (bytesPerSecond < 1024 * 1024)
+    return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+  return `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`;
+}
+
 export default function About(): React.JSX.Element {
   const [meta, setMeta] = useState<AboutMetadata>({
     appVersion: "1.0.0",
@@ -44,6 +68,12 @@ export default function About(): React.JSX.Element {
   const [isOpeningDir, setIsOpeningDir] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  const [updaterState, setUpdaterState] = useState<UpdaterState>("idle");
+  const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] =
+    useState<DownloadProgress | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   const runtime = window.electron.process.versions;
 
@@ -90,20 +120,90 @@ export default function About(): React.JSX.Element {
     void loadAboutMetadata();
   }, []);
 
+  useEffect(() => {
+    const removeOnUpdateAvailable = window.api.onUpdateAvailable((info) => {
+      setUpdaterState("available");
+      setLatestVersion(info.version);
+    });
+    const removeOnUpdateNotAvailable = window.api.onUpdateNotAvailable(() => {
+      setUpdaterState("not-available");
+    });
+    const removeOnUpdateDownloadProgress = window.api.onUpdateDownloadProgress(
+      (progress) => {
+        setUpdaterState("downloading");
+        setDownloadProgress(progress);
+      },
+    );
+    const removeOnUpdateDownloaded = window.api.onUpdateDownloaded(() => {
+      setUpdaterState("downloaded");
+    });
+    const removeOnUpdateError = window.api.onUpdateError((err) => {
+      setUpdaterState("error");
+      setUpdateError(err.message);
+    });
+
+    return () => {
+      removeOnUpdateAvailable();
+      removeOnUpdateNotAvailable();
+      removeOnUpdateDownloadProgress();
+      removeOnUpdateDownloaded();
+      removeOnUpdateError();
+    };
+  }, []);
+
   const checkForUpdates = async (): Promise<void> => {
     setIsCheckingUpdates(true);
     setError(null);
     setNotice(null);
+    setUpdateError(null);
+    setDownloadProgress(null);
+    setUpdaterState("checking");
 
     try {
-      await window.api.checkForUpdates();
-      setNotice("Update check request sent to main process.");
-    } catch {
-      setNotice(
-        "No update handler is currently wired. Add main IPC handler `app:check-updates` to enable this action.",
-      );
+      const result = await window.api.checkForUpdates();
+
+      if (!result.ok) {
+        setUpdaterState("error");
+        setUpdateError("Failed to check for updates.");
+        return;
+      }
+
+      if (result.available) {
+        setUpdaterState("available");
+        setLatestVersion(result.latestVersion ?? null);
+      } else {
+        setUpdaterState("not-available");
+      }
+    } catch (err) {
+      setUpdaterState("error");
+      setUpdateError(String(err));
     } finally {
       setIsCheckingUpdates(false);
+    }
+  };
+
+  const downloadUpdate = async (): Promise<void> => {
+    setUpdateError(null);
+    setDownloadProgress(null);
+    setUpdaterState("downloading");
+
+    try {
+      const result = await window.api.downloadUpdate();
+      if (!result.ok) {
+        setUpdaterState("error");
+        setUpdateError(result.error || "Failed to download update.");
+      }
+    } catch (err) {
+      setUpdaterState("error");
+      setUpdateError(String(err));
+    }
+  };
+
+  const installUpdate = async (): Promise<void> => {
+    try {
+      await window.api.installUpdate();
+    } catch (err) {
+      setUpdateError(String(err));
     }
   };
 
@@ -142,6 +242,91 @@ export default function About(): React.JSX.Element {
     }
   };
 
+  const renderUpdaterStatus = (): React.ReactNode => {
+    if (updaterState === "idle") return null;
+
+    if (updaterState === "checking") {
+      return (
+        <p className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm">
+          Checking for updates...
+        </p>
+      );
+    }
+
+    if (updaterState === "not-available") {
+      return (
+        <p className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm">
+          You are up to date (v{meta.appVersion})
+        </p>
+      );
+    }
+
+    if (updaterState === "available") {
+      return (
+        <div className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm space-y-2">
+          <p>
+            Update available: v{latestVersion ?? "unknown"} (current: v
+            {meta.appVersion})
+          </p>
+          <Button
+            size="sm"
+            variant="default"
+            onClick={() => void downloadUpdate()}
+          >
+            <Download className="size-4" />
+            Download update
+          </Button>
+        </div>
+      );
+    }
+
+    if (updaterState === "downloading") {
+      const progress = downloadProgress;
+      return (
+        <div className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm space-y-2">
+          <p className="font-medium">Downloading update...</p>
+          {progress && (
+            <>
+              <Progress value={progress.percent} />
+              <p className="text-muted-foreground">
+                {progress.percent.toFixed(0)}% (
+                {formatBytes(progress.transferred)} /{" "}
+                {formatBytes(progress.total)}) at{" "}
+                {formatSpeed(progress.bytesPerSecond)}
+              </p>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    if (updaterState === "downloaded") {
+      return (
+        <div className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm space-y-2">
+          <p className="font-medium">Update downloaded</p>
+          <Button
+            size="sm"
+            variant="default"
+            onClick={() => void installUpdate()}
+          >
+            <RotateCcw className="size-4" />
+            Restart to install
+          </Button>
+        </div>
+      );
+    }
+
+    if (updaterState === "error") {
+      return (
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {updateError || "An unknown update error occurred."}
+        </p>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-4">
@@ -165,6 +350,8 @@ export default function About(): React.JSX.Element {
             {notice}
           </p>
         )}
+
+        {renderUpdaterStatus()}
 
         <div className="grid gap-2 rounded-lg border p-3">
           {rows.map((row) => (
