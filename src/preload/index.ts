@@ -1,6 +1,54 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 
+type ProviderAuthMode = "passthrough" | "inject";
+
+interface ApiKeyMetadata {
+  providerId: string;
+  providerName: string;
+  baseUrl: string;
+  isActive: boolean;
+  hasKey: boolean;
+  authMode: ProviderAuthMode;
+  keyUpdatedAt: string | null;
+  maskedPreview: string | null;
+  isValid: boolean | null;
+  lastValidatedAt: string | null;
+}
+
+interface ClearDataResult {
+  ok: boolean;
+  settingsRetained: boolean;
+}
+
+interface ClearAllDataResult extends ClearDataResult {
+  usage_logs?: number;
+  daily_summary?: number;
+  weekly_summary?: number;
+  api_keys?: number;
+  error?: string;
+}
+
+interface ClearBeforeDataResult extends ClearDataResult {
+  before: string;
+  usageLogsDeleted?: number;
+  error?: string;
+}
+
+interface CheckUpdatesResult {
+  ok: boolean;
+  available: boolean;
+  currentVersion: string;
+  latestVersion: string | null;
+  checkedAt: string;
+}
+
+interface OpenDataDirectoryResult {
+  ok: boolean;
+  path: string;
+  error?: string;
+}
+
 const api = {
   getProxyStatus: (): Promise<{ isRunning: boolean; port: number | null }> =>
     ipcRenderer.invoke("proxy:get-status"),
@@ -63,6 +111,58 @@ const api = {
   dbGetSetting: (key: string) => ipcRenderer.invoke("db:get-setting", key),
   dbSetSetting: (key: string, value: string) =>
     ipcRenderer.invoke("db:set-setting", key, value),
+  getRuntimeSettings: (): Promise<{
+    proxy: {
+      port: number;
+      enabled: boolean;
+      autoStart: boolean;
+    };
+    providers: Array<{
+      providerId: string;
+      providerName: string;
+      baseUrl: string;
+      isActive: boolean;
+      authMode: "passthrough" | "inject";
+      hasKey: boolean;
+      keyUpdatedAt: string | null;
+    }>;
+  }> => ipcRenderer.invoke("settings:get-runtime"),
+  updateRuntimeSettings: (payload: {
+    proxy?: Partial<{
+      port: number;
+      enabled: boolean;
+      autoStart: boolean;
+    }>;
+    providers?: Array<{
+      providerId: string;
+      baseUrl?: string;
+      isActive?: boolean;
+      authMode?: "passthrough" | "inject";
+    }>;
+  }) => ipcRenderer.invoke("settings:update-runtime", payload),
+  listApiKeyMetadata: (): Promise<
+    ApiKeyMetadata[]
+  > => ipcRenderer.invoke("api-key:list"),
+  setApiKey: (payload: {
+    providerId: string;
+    apiKey: string;
+    authMode?: "passthrough" | "inject";
+  }) => ipcRenderer.invoke("api-key:set", payload),
+  deleteApiKey: (providerId: string) =>
+    ipcRenderer.invoke("api-key:delete", { providerId }),
+  testProviderConnection: (payload: {
+    providerId: string;
+    baseUrl?: string;
+    apiKey?: string;
+  }) => ipcRenderer.invoke("provider:test-connection", payload),
+  clearDataBefore: (before: string): Promise<ClearBeforeDataResult> =>
+    ipcRenderer.invoke("data:clear-before", before),
+  clearAllData: (): Promise<ClearAllDataResult> =>
+    ipcRenderer.invoke("data:clear-all"),
+  checkForUpdates: (): Promise<CheckUpdatesResult> =>
+    ipcRenderer.invoke("app:check-updates"),
+  openDataDirectory: (path?: string): Promise<OpenDataDirectoryResult> =>
+    ipcRenderer.invoke("app:open-data-directory", path),
 
   // Real-time events (Main → Renderer)
   onUsageUpdated: (callback: (data: unknown) => void) => {

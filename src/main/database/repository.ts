@@ -20,20 +20,26 @@ import {
 } from "date-fns";
 
 import type {
-  UsageLog,
-  DailySummary,
-  WeeklySummary,
-  Period,
-  UsageFilters,
-  InsertUsageLogInput,
-  UpsertSummaryInput,
   AggregateTotal,
+  ApiKey,
+  ApiKeyMetadata,
+  ClearAllDataResult,
+  ClearUsageDataResult,
+  DailySummary,
+  DailyTrend,
+  InsertUsageLogInput,
   ModelBreakdown,
   ModelUsage,
-  DailyTrend,
-  WeeklyTrend,
+  Period,
+  ProviderApiKeyMetadata,
   ProviderSummary,
+  SettingMetadata,
+  UpsertSummaryInput,
+  UsageFilters,
+  UsageLog,
   UsageSummary,
+  WeeklySummary,
+  WeeklyTrend,
 } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -111,6 +117,49 @@ function rowToAggregate(
   };
 }
 
+function rowToApiKey(row: Record<string, unknown> | undefined): ApiKey | null {
+  if (!row) return null;
+  return {
+    id: String(row.id),
+    provider_id: String(row.provider_id),
+    encrypted_key: String(row.encrypted_key),
+    is_valid: Boolean(row.is_valid),
+    last_validated_at: (row.last_validated_at as string | null) ?? null,
+    created_at: String(row.created_at),
+  };
+}
+
+function rowToApiKeyMetadata(
+  row: Record<string, unknown> | undefined,
+): ApiKeyMetadata | null {
+  const apiKey = rowToApiKey(row);
+  if (!apiKey) return null;
+  return {
+    id: apiKey.id,
+    provider_id: apiKey.provider_id,
+    is_valid: apiKey.is_valid,
+    last_validated_at: apiKey.last_validated_at,
+    created_at: apiKey.created_at,
+  };
+}
+
+function rowToProviderApiKeyMetadata(
+  row: Record<string, unknown> | undefined,
+): ProviderApiKeyMetadata | null {
+  if (!row) return null;
+  return {
+    provider_id: String(row.provider_id),
+    provider_name: String(row.provider_name),
+    has_api_key: Boolean(row.has_api_key),
+    is_valid:
+      row.is_valid === null || row.is_valid === undefined
+        ? null
+        : Boolean(row.is_valid),
+    last_validated_at: (row.last_validated_at as string | null) ?? null,
+    created_at: (row.created_at as string | null) ?? null,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // UsageRepository
 // ---------------------------------------------------------------------------
@@ -143,7 +192,21 @@ export class UsageRepository {
     getUsageTrend: Database.Statement;
     getWeeklyTrend: Database.Statement;
     getSetting: Database.Statement;
+    getSettingsMetadata: Database.Statement;
     setSetting: Database.Statement;
+    deleteSetting: Database.Statement;
+    clearSettings: Database.Statement;
+    getApiKeyByProvider: Database.Statement;
+    listApiKeyMetadata: Database.Statement;
+    getProviderApiKeyMetadata: Database.Statement;
+    setApiKeyInsert: Database.Statement;
+    setApiKeyUpdate: Database.Statement;
+    setApiKeyValidation: Database.Statement;
+    deleteApiKeyByProvider: Database.Statement;
+    clearApiKeys: Database.Statement;
+    clearUsageLogs: Database.Statement;
+    clearDailySummary: Database.Statement;
+    clearWeeklySummary: Database.Statement;
     deleteUsageBefore: Database.Statement;
     upsertDailyInsert: Database.Statement;
     upsertDailyUpdate: Database.Statement;
@@ -454,12 +517,111 @@ export class UsageRepository {
       SELECT value FROM settings WHERE key = ?
     `);
 
+    this.stmts.getSettingsMetadata = db.prepare(`
+      SELECT key, updated_at
+      FROM settings
+      ORDER BY key ASC
+    `);
+
     this.stmts.setSetting = db.prepare(`
       INSERT OR REPLACE INTO settings (key, value, updated_at)
       VALUES (?, ?, datetime('now'))
     `);
 
+    this.stmts.deleteSetting = db.prepare(`
+      DELETE FROM settings WHERE key = ?
+    `);
+
+    this.stmts.clearSettings = db.prepare(`
+      DELETE FROM settings
+    `);
+
+    // -- API keys --------------------------------------------------------------
+    this.stmts.getApiKeyByProvider = db.prepare(`
+      SELECT id, provider_id, encrypted_key, is_valid, last_validated_at, created_at
+      FROM api_keys
+      WHERE provider_id = ?
+      ORDER BY datetime(created_at) DESC, rowid DESC
+      LIMIT 1
+    `);
+
+    this.stmts.listApiKeyMetadata = db.prepare(`
+      SELECT
+        p.id AS provider_id,
+        p.name AS provider_name,
+        CASE WHEN ak.id IS NULL THEN 0 ELSE 1 END AS has_api_key,
+        CASE WHEN ak.id IS NULL THEN NULL ELSE ak.is_valid END AS is_valid,
+        ak.last_validated_at AS last_validated_at,
+        ak.created_at AS created_at
+      FROM providers p
+      LEFT JOIN api_keys ak ON ak.id = (
+        SELECT id
+        FROM api_keys
+        WHERE provider_id = p.id
+        ORDER BY datetime(created_at) DESC, rowid DESC
+        LIMIT 1
+      )
+      ORDER BY p.name ASC
+    `);
+
+    this.stmts.getProviderApiKeyMetadata = db.prepare(`
+      SELECT
+        p.id AS provider_id,
+        p.name AS provider_name,
+        CASE WHEN ak.id IS NULL THEN 0 ELSE 1 END AS has_api_key,
+        CASE WHEN ak.id IS NULL THEN NULL ELSE ak.is_valid END AS is_valid,
+        ak.last_validated_at AS last_validated_at,
+        ak.created_at AS created_at
+      FROM providers p
+      LEFT JOIN api_keys ak ON ak.id = (
+        SELECT id
+        FROM api_keys
+        WHERE provider_id = p.id
+        ORDER BY datetime(created_at) DESC, rowid DESC
+        LIMIT 1
+      )
+      WHERE p.id = ?
+    `);
+
+    this.stmts.setApiKeyInsert = db.prepare(`
+      INSERT INTO api_keys (
+        id, provider_id, encrypted_key, is_valid, last_validated_at, created_at
+      ) VALUES (?, ?, ?, 1, NULL, datetime('now'))
+    `);
+
+    this.stmts.setApiKeyUpdate = db.prepare(`
+      UPDATE api_keys
+      SET encrypted_key = ?, is_valid = 1, last_validated_at = NULL
+      WHERE id = ?
+    `);
+
+    this.stmts.setApiKeyValidation = db.prepare(`
+      UPDATE api_keys
+      SET is_valid = ?, last_validated_at = ?
+      WHERE id = ?
+    `);
+
+    this.stmts.deleteApiKeyByProvider = db.prepare(`
+      DELETE FROM api_keys WHERE provider_id = ?
+    `);
+
+    this.stmts.clearApiKeys = db.prepare(`
+      DELETE FROM api_keys
+    `);
+
     // -- Cleanup ---------------------------------------------------------------
+    this.stmts.clearUsageLogs = db.prepare(`
+      DELETE FROM usage_logs
+    `);
+
+    this.stmts.clearDailySummary = db.prepare(`
+      DELETE FROM daily_summary
+    `);
+
+    this.stmts.clearWeeklySummary = db.prepare(`
+      DELETE FROM weekly_summary
+    `);
+
     this.stmts.deleteUsageBefore = db.prepare(`
       DELETE FROM usage_logs WHERE requested_at < ?
     `);
@@ -1059,13 +1221,139 @@ export class UsageRepository {
     return row?.value ?? null;
   }
 
+  getSettingsMetadata(): SettingMetadata[] {
+    return this.stmts.getSettingsMetadata.all() as SettingMetadata[];
+  }
+
   setSetting(key: string, value: string): void {
     this.stmts.setSetting.run(key, value);
+  }
+
+  deleteSetting(key: string): number {
+    const result = this.stmts.deleteSetting.run(key);
+    return result.changes;
+  }
+
+  clearSettings(): number {
+    const result = this.stmts.clearSettings.run();
+    return result.changes;
+  }
+
+  // ---------------------------------------------------------------------------
+  // API keys
+  // ---------------------------------------------------------------------------
+
+  getApiKeyMetadata(providerId: string): ApiKeyMetadata | null {
+    const row = this.stmts.getApiKeyByProvider.get(providerId) as
+      | Record<string, unknown>
+      | undefined;
+    return rowToApiKeyMetadata(row);
+  }
+
+  getEncryptedApiKey(providerId: string): string | null {
+    const row = this.stmts.getApiKeyByProvider.get(providerId) as
+      | Record<string, unknown>
+      | undefined;
+    return rowToApiKey(row)?.encrypted_key ?? null;
+  }
+
+  listApiKeyMetadata(): ProviderApiKeyMetadata[] {
+    const rows = this.stmts.listApiKeyMetadata.all() as Array<
+      Record<string, unknown>
+    >;
+    return rows
+      .map((row) => rowToProviderApiKeyMetadata(row))
+      .filter(
+        (row): row is ProviderApiKeyMetadata =>
+          row !== null && row.provider_id.length > 0,
+      );
+  }
+
+  getProviderApiKeyMetadata(providerId: string): ProviderApiKeyMetadata | null {
+    const row = this.stmts.getProviderApiKeyMetadata.get(providerId) as
+      | Record<string, unknown>
+      | undefined;
+    return rowToProviderApiKeyMetadata(row);
+  }
+
+  setApiKey(providerId: string, encryptedKey: string): ApiKeyMetadata {
+    const existing = this.stmts.getApiKeyByProvider.get(providerId) as
+      | Record<string, unknown>
+      | undefined;
+
+    if (existing) {
+      this.stmts.setApiKeyUpdate.run(encryptedKey, existing.id);
+    } else {
+      this.stmts.setApiKeyInsert.run(uuidv4(), providerId, encryptedKey);
+    }
+
+    const updated = this.stmts.getApiKeyByProvider.get(providerId) as
+      | Record<string, unknown>
+      | undefined;
+    const metadata = rowToApiKeyMetadata(updated);
+    if (!metadata) {
+      throw new Error("Failed to persist API key metadata");
+    }
+    return metadata;
+  }
+
+  setApiKeyValidation(
+    providerId: string,
+    isValid: boolean,
+    lastValidatedAt = new Date().toISOString(),
+  ): ApiKeyMetadata | null {
+    const existing = this.stmts.getApiKeyByProvider.get(providerId) as
+      | Record<string, unknown>
+      | undefined;
+    if (!existing) {
+      return null;
+    }
+
+    this.stmts.setApiKeyValidation.run(
+      isValid ? 1 : 0,
+      lastValidatedAt,
+      existing.id,
+    );
+
+    const updated = this.stmts.getApiKeyByProvider.get(providerId) as
+      | Record<string, unknown>
+      | undefined;
+    return rowToApiKeyMetadata(updated);
+  }
+
+  deleteApiKey(providerId: string): number {
+    const result = this.stmts.deleteApiKeyByProvider.run(providerId);
+    return result.changes;
+  }
+
+  clearApiKeys(): number {
+    const result = this.stmts.clearApiKeys.run();
+    return result.changes;
   }
 
   // ---------------------------------------------------------------------------
   // Cleanup
   // ---------------------------------------------------------------------------
+
+  clearUsageData(): ClearUsageDataResult {
+    const clear = this.db.transaction(() => ({
+      usage_logs: this.stmts.clearUsageLogs.run().changes,
+      daily_summary: this.stmts.clearDailySummary.run().changes,
+      weekly_summary: this.stmts.clearWeeklySummary.run().changes,
+    }));
+    return clear();
+  }
+
+  clearAllData(): ClearAllDataResult {
+    const clear = this.db.transaction(() => ({
+      usage_logs: this.stmts.clearUsageLogs.run().changes,
+      daily_summary: this.stmts.clearDailySummary.run().changes,
+      weekly_summary: this.stmts.clearWeeklySummary.run().changes,
+      settings: this.stmts.clearSettings.run().changes,
+      api_keys: this.stmts.clearApiKeys.run().changes,
+    }));
+    return clear();
+  }
 
   deleteUsageBefore(date: string): number {
     const result = this.stmts.deleteUsageBefore.run(date);

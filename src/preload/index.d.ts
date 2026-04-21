@@ -167,6 +167,111 @@ interface WeeklySummary {
   image_count: number;
 }
 
+type ProviderAuthMode = "passthrough" | "inject";
+
+interface ApiKeyMetadata {
+  providerId: string;
+  providerName: string;
+  baseUrl: string;
+  isActive: boolean;
+  hasKey: boolean;
+  authMode: ProviderAuthMode;
+  keyUpdatedAt: string | null;
+  maskedPreview: string | null;
+  isValid: boolean | null;
+  lastValidatedAt: string | null;
+}
+
+interface ClearDataResult {
+  ok: boolean;
+  settingsRetained: boolean;
+}
+
+interface ClearAllDataResult extends ClearDataResult {
+  usage_logs?: number;
+  daily_summary?: number;
+  weekly_summary?: number;
+  api_keys?: number;
+  error?: string;
+}
+
+interface ClearBeforeDataResult extends ClearDataResult {
+  before: string;
+  usageLogsDeleted?: number;
+  error?: string;
+}
+
+interface CheckUpdatesResult {
+  ok: boolean;
+  available: boolean;
+  currentVersion: string;
+  latestVersion: string | null;
+  checkedAt: string;
+}
+
+interface OpenDataDirectoryResult {
+  ok: boolean;
+  path: string;
+  error?: string;
+}
+
+interface RuntimeProviderSettings {
+  providerId: string;
+  providerName: string;
+  baseUrl: string;
+  isActive: boolean;
+  authMode: ProviderAuthMode;
+  hasKey: boolean;
+  keyUpdatedAt: string | null;
+}
+
+interface RuntimeSettings {
+  proxy: {
+    port: number;
+    enabled: boolean;
+    autoStart: boolean;
+  };
+  providers: RuntimeProviderSettings[];
+}
+
+interface RuntimeSettingsUpdate {
+  proxy?: Partial<RuntimeSettings["proxy"]>;
+  providers?: Array<{
+    providerId: string;
+    baseUrl?: string;
+    isActive?: boolean;
+    authMode?: ProviderAuthMode;
+  }>;
+}
+
+interface ApiKeySetInput {
+  providerId: string;
+  apiKey: string;
+  authMode?: ProviderAuthMode;
+}
+
+interface ApiKeySetResult {
+  ok: boolean;
+  providerId: string;
+  hasKey: boolean;
+  authMode?: ProviderAuthMode;
+  keyUpdatedAt?: string | null;
+}
+
+interface ProviderConnectionTestInput {
+  providerId: string;
+  baseUrl?: string;
+  apiKey?: string;
+}
+
+interface ProviderConnectionTestResult {
+  ok: boolean;
+  providerId: string;
+  reachable: boolean;
+  authMode?: ProviderAuthMode;
+  error?: string;
+}
+
 interface ProxyAPI {
   // Proxy status
   getProxyStatus: () => Promise<{ isRunning: boolean; port: number | null }>;
@@ -232,6 +337,20 @@ interface ProxyAPI {
   // Database — settings
   dbGetSetting: (key: string) => Promise<string | null>;
   dbSetSetting: (key: string, value: string) => Promise<boolean>;
+  getRuntimeSettings: () => Promise<RuntimeSettings>;
+  updateRuntimeSettings: (
+    payload: RuntimeSettingsUpdate,
+  ) => Promise<{ ok: boolean; settings: RuntimeSettings }>;
+  listApiKeyMetadata: () => Promise<ApiKeyMetadata[]>;
+  setApiKey: (payload: ApiKeySetInput) => Promise<ApiKeySetResult>;
+  deleteApiKey: (providerId: string) => Promise<ApiKeySetResult>;
+  testProviderConnection: (
+    payload: ProviderConnectionTestInput,
+  ) => Promise<ProviderConnectionTestResult>;
+  clearDataBefore: (before: string) => Promise<ClearBeforeDataResult>;
+  clearAllData: () => Promise<ClearAllDataResult>;
+  checkForUpdates: () => Promise<CheckUpdatesResult>;
+  openDataDirectory: (path?: string) => Promise<OpenDataDirectoryResult>;
 
   // Real-time events (Main → Renderer)
   onUsageUpdated: (callback: (data: unknown) => void) => () => void;

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "@/components/layout/AppLayout";
 import Overview from "@/components/dashboard/Overview";
 import ByProvider from "@/components/dashboard/ByProvider";
@@ -10,6 +10,7 @@ import Settings from "@/components/settings/Settings";
 import GeneralSettings from "@/components/settings/GeneralSettings";
 import ProviderConfig from "@/components/settings/ProviderConfig";
 import ApiKeyManager from "@/components/settings/ApiKeyManager";
+import About from "@/components/settings/About";
 import { useSettingsStore } from "@/stores/settingsStore";
 
 function App(): React.JSX.Element {
@@ -17,7 +18,7 @@ function App(): React.JSX.Element {
   const loadSettings = useSettingsStore((s) => s.loadSettings);
 
   useEffect(() => {
-    loadSettings();
+    void loadSettings();
   }, [loadSettings]);
 
   useEffect(() => {
@@ -41,9 +42,12 @@ function App(): React.JSX.Element {
           <Route path="cost" element={<CostView />} />
           <Route path="history" element={<UsageHistory />} />
           <Route path="settings" element={<Settings />}>
-            <Route index element={<GeneralSettings />} />
+            <Route index element={<Navigate to="general" replace />} />
+            <Route path="general" element={<GeneralSettings />} />
             <Route path="providers" element={<ProviderConfig />} />
             <Route path="api-keys" element={<ApiKeyManager />} />
+            <Route path="about" element={<About />} />
+            <Route path="*" element={<Navigate to="general" replace />} />
           </Route>
         </Route>
       </Routes>

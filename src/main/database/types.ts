@@ -109,6 +109,11 @@ export interface SettingsRecord {
   updated_at: string;
 }
 
+export interface SettingMetadata {
+  key: string;
+  updated_at: string;
+}
+
 export interface ApiKey {
   id: string;
   provider_id: string;
@@ -116,6 +121,34 @@ export interface ApiKey {
   is_valid: boolean;
   last_validated_at: string | null;
   created_at: string;
+}
+
+export interface ApiKeyMetadata {
+  id: string;
+  provider_id: string;
+  is_valid: boolean;
+  last_validated_at: string | null;
+  created_at: string;
+}
+
+export interface ProviderApiKeyMetadata {
+  provider_id: string;
+  provider_name: string;
+  has_api_key: boolean;
+  is_valid: boolean | null;
+  last_validated_at: string | null;
+  created_at: string | null;
+}
+
+export interface ClearUsageDataResult {
+  usage_logs: number;
+  daily_summary: number;
+  weekly_summary: number;
+}
+
+export interface ClearAllDataResult extends ClearUsageDataResult {
+  settings: number;
+  api_keys: number;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,11 +1,441 @@
-import { ipcMain, BrowserWindow } from "electron";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { dirname, extname } from "path";
+import { PROVIDER_ROUTES } from "../proxy/routing";
 import type { ProxyServer } from "../proxy/server";
-import type { ProxyStatus } from "../proxy/types";
+import type {
+  ProviderAuthMode,
+  ProviderConfig,
+  ProxyStatus,
+} from "../proxy/types";
 import type { UsageRepository } from "../database/repository";
-import type { Period } from "../database/types";
+import type { Period, ProviderApiKeyMetadata } from "../database/types";
+import { decryptKey, encryptKey } from "../security/encryption";
 
 let proxyServer: ProxyServer | null = null;
 let repository: UsageRepository | null = null;
+
+const APP_SETTINGS_KEY = "app_settings";
+const API_KEY_SETTING_PREFIX = "provider_api_key:";
+const AUTH_MODE_SETTING_PREFIX = "provider_auth_mode:";
+
+const DEFAULT_PROXY_PORT = 8765;
+const MIN_PROXY_PORT = 1024;
+const MAX_PROXY_PORT = 65535;
+
+interface StoredProxySettings {
+  port: number;
+  enabled: boolean;
+  autoStart: boolean;
+}
+
+interface StoredProviderEntry {
+  id: string;
+  name?: string;
+  baseUrl?: string;
+  isActive?: boolean;
+}
+
+interface StoredAppSettings {
+  proxy?: Partial<StoredProxySettings>;
+  providers?: StoredProviderEntry[];
+}
+
+export interface RuntimeProviderSnapshot {
+  providerId: string;
+  providerName: string;
+  baseUrl: string;
+  isActive: boolean;
+  authMode: ProviderAuthMode;
+  hasKey: boolean;
+  keyUpdatedAt: string | null;
+}
+
+export interface ApiKeyListMetadata extends RuntimeProviderSnapshot {
+  maskedPreview: string | null;
+  isValid: boolean | null;
+  lastValidatedAt: string | null;
+}
+
+export interface RuntimeSettingsSnapshot {
+  proxy: StoredProxySettings;
+  providers: RuntimeProviderSnapshot[];
+}
+
+export interface RuntimeSettingsResolved {
+  snapshot: RuntimeSettingsSnapshot;
+  providerRuntime: Partial<Record<string, Partial<ProviderConfig>>>;
+}
+
+export interface RuntimeSettingsBridge {
+  getSnapshot: () => RuntimeSettingsSnapshot;
+  refreshFromRepository: () => RuntimeSettingsSnapshot;
+}
+
+interface RuntimeSettingsUpdatePayload {
+  proxy?: Partial<StoredProxySettings>;
+  providers?: Array<{
+    providerId: string;
+    baseUrl?: string;
+    isActive?: boolean;
+    authMode?: ProviderAuthMode;
+  }>;
+}
+
+interface ApiKeySetPayload {
+  providerId: string;
+  apiKey: string;
+  authMode?: ProviderAuthMode;
+}
+
+interface ProviderTestPayload {
+  providerId: string;
+  baseUrl?: string;
+  apiKey?: string;
+}
+
+interface ApiKeyMutationResponse {
+  ok: boolean;
+  providerId: string;
+  hasKey: boolean;
+  authMode?: ProviderAuthMode;
+  keyUpdatedAt?: string | null;
+}
+
+interface RuntimeSettingsUpdateResponse {
+  ok: boolean;
+  settings: RuntimeSettingsSnapshot;
+}
+
+interface ProviderConnectionResponse {
+  ok: boolean;
+  providerId: string;
+  reachable: boolean;
+  authMode?: ProviderAuthMode;
+  error?: string;
+}
+
+function isSecretSettingKey(key: string): boolean {
+  return key.startsWith(API_KEY_SETTING_PREFIX);
+}
+
+function normalizeProviderId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeAuthMode(value: unknown): ProviderAuthMode {
+  return value === "inject" ? "inject" : "passthrough";
+}
+
+function maskApiKeyPreview(apiKey: string | null): string | null {
+  if (!apiKey) {
+    return null;
+  }
+
+  const trimmed = apiKey.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  if (trimmed.length <= 8) {
+    return `${trimmed.slice(0, 2)}****`;
+  }
+
+  return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
+}
+
+function decryptStoredApiKey(encryptedKey: string | null): string | null {
+  if (!encryptedKey) {
+    return null;
+  }
+
+  try {
+    return decryptKey(encryptedKey);
+  } catch (error) {
+    console.warn("[IPC] Failed to decrypt stored API key:", error);
+    return null;
+  }
+}
+
+function encryptApiKeyValue(apiKey: string): string | null {
+  try {
+    return encryptKey(apiKey);
+  } catch (error) {
+    console.warn("[IPC] Failed to encrypt API key:", error);
+    return null;
+  }
+}
+
+function resolveOpenDataDirectoryTarget(payload: unknown): string {
+  const defaultPath = app.getPath("userData");
+
+  const candidate =
+    typeof payload === "string"
+      ? payload
+      : payload && typeof payload === "object"
+        ? (payload as { path?: unknown; databasePath?: unknown }).path ??
+          (payload as { path?: unknown; databasePath?: unknown }).databasePath
+        : null;
+
+  if (typeof candidate !== "string" || candidate.trim().length === 0) {
+    return defaultPath;
+  }
+
+  const trimmed = candidate.trim();
+  return extname(trimmed) ? dirname(trimmed) : trimmed;
+}
+
+function normalizeProxyPort(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    return DEFAULT_PROXY_PORT;
+  }
+  if (value < MIN_PROXY_PORT || value > MAX_PROXY_PORT) {
+    return DEFAULT_PROXY_PORT;
+  }
+  return value;
+}
+
+function parseStoredAppSettings(raw: string | null): StoredAppSettings {
+  if (!raw) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as StoredAppSettings;
+    if (!parsed || typeof parsed !== "object") {
+      return {};
+    }
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function toProviderRuntimeSnapshot(
+  repo: Pick<
+    UsageRepository,
+    "getSetting" | "getEncryptedApiKey" | "listApiKeyMetadata"
+  >,
+  appSettings: StoredAppSettings,
+): RuntimeSettingsResolved {
+  const providerIds = new Set<string>(Object.keys(PROVIDER_ROUTES));
+  const apiKeyMetadataByProvider = new Map<string, ProviderApiKeyMetadata>();
+
+  for (const metadata of repo.listApiKeyMetadata()) {
+    apiKeyMetadataByProvider.set(metadata.provider_id, metadata);
+  }
+
+  for (const entry of appSettings.providers ?? []) {
+    const providerId = normalizeProviderId(entry?.id);
+    if (providerId) {
+      providerIds.add(providerId);
+    }
+  }
+
+  const providers: RuntimeProviderSnapshot[] = [];
+  const providerRuntime: Partial<Record<string, Partial<ProviderConfig>>> = {};
+
+  for (const providerId of providerIds) {
+    const route = PROVIDER_ROUTES[providerId];
+    const stored = (appSettings.providers ?? []).find(
+      (entry) => normalizeProviderId(entry.id) === providerId,
+    );
+    const providerName =
+      (stored?.name && stored.name.trim()) || route?.name || providerId;
+    const baseUrl =
+      (stored?.baseUrl && stored.baseUrl.trim()) || route?.baseUrl || "";
+    const isActive = stored?.isActive ?? true;
+    const authMode = normalizeAuthMode(
+      repo.getSetting(`${AUTH_MODE_SETTING_PREFIX}${providerId}`),
+    );
+    const apiKeyMetadata = apiKeyMetadataByProvider.get(providerId);
+    const encryptedKey = repo.getEncryptedApiKey(providerId);
+    const decryptedKey = decryptStoredApiKey(encryptedKey);
+
+    providers.push({
+      providerId,
+      providerName,
+      baseUrl,
+      isActive,
+      authMode,
+      hasKey: apiKeyMetadata?.has_api_key ?? false,
+      keyUpdatedAt: apiKeyMetadata?.created_at ?? null,
+    });
+
+    providerRuntime[providerId] = {
+      id: providerId,
+      name: providerName,
+      baseUrl,
+      authMode,
+      apiKey: decryptedKey ?? undefined,
+    };
+  }
+
+  const proxy = {
+    port: normalizeProxyPort(appSettings.proxy?.port),
+    enabled: appSettings.proxy?.enabled ?? true,
+    autoStart: appSettings.proxy?.autoStart ?? true,
+  };
+
+  return {
+    snapshot: { proxy, providers },
+    providerRuntime,
+  };
+}
+
+export function resolveRuntimeSettingsFromRepository(
+  repo: Pick<
+    UsageRepository,
+    "getSetting" | "getEncryptedApiKey" | "listApiKeyMetadata"
+  >,
+): RuntimeSettingsResolved {
+  const appSettings = parseStoredAppSettings(repo.getSetting(APP_SETTINGS_KEY));
+  return toProviderRuntimeSnapshot(repo, appSettings);
+}
+
+function getRuntimeSnapshot(
+  repo: UsageRepository,
+  runtimeBridge?: RuntimeSettingsBridge,
+): RuntimeSettingsSnapshot {
+  if (runtimeBridge?.getSnapshot) {
+    return runtimeBridge.getSnapshot();
+  }
+  return resolveRuntimeSettingsFromRepository(repo).snapshot;
+}
+
+function refreshRuntimeSnapshot(
+  repo: UsageRepository,
+  runtimeBridge?: RuntimeSettingsBridge,
+): RuntimeSettingsSnapshot {
+  if (runtimeBridge?.refreshFromRepository) {
+    return runtimeBridge.refreshFromRepository();
+  }
+  return resolveRuntimeSettingsFromRepository(repo).snapshot;
+}
+
+function buildApiKeyListMetadata(
+  repo: UsageRepository,
+  runtimeBridge?: RuntimeSettingsBridge,
+): ApiKeyListMetadata[] {
+  const runtimeProviders = getRuntimeSnapshot(repo, runtimeBridge).providers;
+  const metadataByProvider = new Map(
+    repo.listApiKeyMetadata().map((metadata) => [
+      metadata.provider_id,
+      metadata,
+    ]),
+  );
+
+  return runtimeProviders.map((provider) => {
+    const metadata = metadataByProvider.get(provider.providerId);
+    return {
+      ...provider,
+      maskedPreview: maskApiKeyPreview(
+        decryptStoredApiKey(repo.getEncryptedApiKey(provider.providerId)),
+      ),
+      isValid: metadata?.is_valid ?? null,
+      lastValidatedAt: metadata?.last_validated_at ?? null,
+    };
+  });
+}
+
+function applyRuntimeSettingsUpdate(
+  repo: UsageRepository,
+  payload: RuntimeSettingsUpdatePayload,
+): void {
+  const appSettings = parseStoredAppSettings(repo.getSetting(APP_SETTINGS_KEY));
+  const nextAppSettings: StoredAppSettings = {
+    ...appSettings,
+    proxy: { ...(appSettings.proxy ?? {}) },
+    providers: [...(appSettings.providers ?? [])],
+  };
+
+  if (payload.proxy) {
+    if (typeof payload.proxy.port === "number") {
+      nextAppSettings.proxy = {
+        ...nextAppSettings.proxy,
+        port: normalizeProxyPort(payload.proxy.port),
+      };
+    }
+    if (typeof payload.proxy.enabled === "boolean") {
+      nextAppSettings.proxy = {
+        ...nextAppSettings.proxy,
+        enabled: payload.proxy.enabled,
+      };
+    }
+    if (typeof payload.proxy.autoStart === "boolean") {
+      nextAppSettings.proxy = {
+        ...nextAppSettings.proxy,
+        autoStart: payload.proxy.autoStart,
+      };
+    }
+  }
+
+  if (Array.isArray(payload.providers)) {
+    const providerIndex = new Map<string, number>();
+    nextAppSettings.providers?.forEach((entry, index) => {
+      const providerId = normalizeProviderId(entry.id);
+      if (providerId) {
+        providerIndex.set(providerId, index);
+      }
+    });
+
+    for (const update of payload.providers) {
+      const providerId = normalizeProviderId(update.providerId);
+      if (!providerId) continue;
+
+      const existingIndex = providerIndex.get(providerId);
+      const existing =
+        existingIndex !== undefined
+          ? (nextAppSettings.providers?.[existingIndex] ?? { id: providerId })
+          : { id: providerId };
+      const merged: StoredProviderEntry = {
+        ...existing,
+        id: providerId,
+      };
+
+      if (typeof update.baseUrl === "string") {
+        merged.baseUrl = update.baseUrl.trim();
+      }
+      if (typeof update.isActive === "boolean") {
+        merged.isActive = update.isActive;
+      }
+      if (update.authMode) {
+        repo.setSetting(
+          `${AUTH_MODE_SETTING_PREFIX}${providerId}`,
+          normalizeAuthMode(update.authMode),
+        );
+      }
+
+      if (existingIndex === undefined) {
+        nextAppSettings.providers?.push(merged);
+        providerIndex.set(
+          providerId,
+          (nextAppSettings.providers?.length ?? 1) - 1,
+        );
+      } else if (nextAppSettings.providers) {
+        nextAppSettings.providers[existingIndex] = merged;
+      }
+    }
+  }
+
+  repo.setSetting(APP_SETTINGS_KEY, JSON.stringify(nextAppSettings));
+}
+
+function validateProviderConnectionPayload(
+  payload: unknown,
+): ProviderTestPayload | null {
+  if (!payload || typeof payload !== "object") return null;
+  const candidate = payload as ProviderTestPayload;
+  const providerId = normalizeProviderId(candidate.providerId);
+  if (!providerId) return null;
+  return {
+    providerId,
+    baseUrl:
+      typeof candidate.baseUrl === "string" ? candidate.baseUrl : undefined,
+    apiKey: typeof candidate.apiKey === "string" ? candidate.apiKey : undefined,
+  };
+}
 
 /**
  * Register IPC handlers for proxy server communication and database queries.
@@ -14,6 +444,7 @@ let repository: UsageRepository | null = null;
 export function registerProxyIpcHandlers(
   server: ProxyServer,
   repo: UsageRepository,
+  runtimeBridge?: RuntimeSettingsBridge,
 ): void {
   proxyServer = server;
   repository = repo;
@@ -151,13 +582,353 @@ export function registerProxyIpcHandlers(
   });
 
   ipcMain.handle("db:get-setting", (_event, key: string) => {
+    if (isSecretSettingKey(key)) {
+      return null;
+    }
     return repository?.getSetting(key);
   });
 
   ipcMain.handle("db:set-setting", (_event, key: string, value: string) => {
+    if (isSecretSettingKey(key)) {
+      return false;
+    }
     repository?.setSetting(key, value);
+    if (key === APP_SETTINGS_KEY && repository) {
+      refreshRuntimeSnapshot(repository, runtimeBridge);
+    }
     return true;
   });
+
+  // ---------------------------------------------------------------------------
+  // Structured settings / API key handlers
+  // ---------------------------------------------------------------------------
+
+  const listApiKeyMetadata = (): ApiKeyListMetadata[] => {
+    if (!repository) return [];
+    return buildApiKeyListMetadata(repository, runtimeBridge);
+  };
+
+  ipcMain.handle("api-key:list", () => listApiKeyMetadata());
+  ipcMain.handle("get-api-keys", () => listApiKeyMetadata());
+
+  const setApiKey = (
+    _event: unknown,
+    payload: unknown,
+  ): ApiKeyMutationResponse => {
+    if (!repository) {
+      return { ok: false, providerId: "", hasKey: false };
+    }
+
+    if (!payload || typeof payload !== "object") {
+      return { ok: false, providerId: "", hasKey: false };
+    }
+
+    const candidate = payload as ApiKeySetPayload;
+    const providerId = normalizeProviderId(candidate.providerId);
+    const apiKey = typeof candidate.apiKey === "string" ? candidate.apiKey : "";
+
+    if (!providerId || apiKey.trim().length === 0) {
+      return { ok: false, providerId: providerId ?? "", hasKey: false };
+    }
+
+    const encryptedKey = encryptApiKeyValue(apiKey.trim());
+    if (!encryptedKey) {
+      return { ok: false, providerId, hasKey: false };
+    }
+
+    repository.deleteApiKey(providerId);
+    repository.setApiKey(providerId, encryptedKey);
+
+    if (candidate.authMode) {
+      repository.setSetting(
+        `${AUTH_MODE_SETTING_PREFIX}${providerId}`,
+        normalizeAuthMode(candidate.authMode),
+      );
+    }
+
+    const snapshot = refreshRuntimeSnapshot(repository, runtimeBridge);
+    const provider = snapshot.providers.find(
+      (entry) => entry.providerId === providerId,
+    );
+
+    return {
+      ok: true,
+      providerId,
+      hasKey: provider?.hasKey ?? true,
+      authMode: provider?.authMode ?? normalizeAuthMode(candidate.authMode),
+      keyUpdatedAt: provider?.keyUpdatedAt ?? null,
+    };
+  };
+
+  ipcMain.handle("api-key:set", setApiKey);
+  ipcMain.handle("set-api-key", setApiKey);
+
+  const deleteApiKey = (
+    _event: unknown,
+    payload: unknown,
+  ): ApiKeyMutationResponse => {
+    if (!repository) {
+      return { ok: false, providerId: "", hasKey: false };
+    }
+
+    const providerId = normalizeProviderId(
+      typeof payload === "string"
+        ? payload
+        : (payload as { providerId?: unknown } | undefined)?.providerId,
+    );
+    if (!providerId) {
+      return { ok: false, providerId: "", hasKey: false };
+    }
+
+    repository.deleteApiKey(providerId);
+    const snapshot = refreshRuntimeSnapshot(repository, runtimeBridge);
+    const provider = snapshot.providers.find(
+      (entry) => entry.providerId === providerId,
+    );
+
+    return {
+      ok: true,
+      providerId,
+      hasKey: provider?.hasKey ?? false,
+      authMode: provider?.authMode ?? "passthrough",
+      keyUpdatedAt: provider?.keyUpdatedAt ?? null,
+    };
+  };
+
+  ipcMain.handle("api-key:delete", deleteApiKey);
+  ipcMain.handle("delete-api-key", deleteApiKey);
+
+  const clearDataBeforeHandler = (
+    _event: unknown,
+    payload: unknown,
+  ): {
+    ok: boolean;
+    before: string;
+    settingsRetained: boolean;
+    usageLogsDeleted?: number;
+    error?: string;
+  } => {
+    if (!repository) {
+      return {
+        ok: false,
+        before: "",
+        settingsRetained: true,
+        error: "Settings repository is unavailable.",
+      };
+    }
+
+    const before =
+      typeof payload === "string"
+        ? payload.trim()
+        : payload && typeof payload === "object"
+          ? (() => {
+              const candidate = (payload as {
+                before?: unknown;
+                date?: unknown;
+              }).before;
+              if (typeof candidate === "string") {
+                return candidate.trim();
+              }
+              const fallback = (payload as {
+                before?: unknown;
+                date?: unknown;
+              }).date;
+              return typeof fallback === "string" ? fallback.trim() : "";
+            })()
+          : "";
+
+    if (!before) {
+      return {
+        ok: false,
+        before: "",
+        settingsRetained: true,
+        error: "Invalid cutoff date.",
+      };
+    }
+
+    return {
+      ok: true,
+      before,
+      settingsRetained: true,
+      usageLogsDeleted: repository.deleteUsageBefore(before),
+    };
+  };
+
+  ipcMain.handle("data:clear-before", clearDataBeforeHandler);
+
+  const clearAllDataHandler = (): {
+    ok: boolean;
+    settingsRetained: boolean;
+    usage_logs?: number;
+    daily_summary?: number;
+    weekly_summary?: number;
+    api_keys?: number;
+    error?: string;
+  } => {
+    if (!repository) {
+      return {
+        ok: false,
+        settingsRetained: true,
+        error: "Settings repository is unavailable.",
+      };
+    }
+
+    const usage = repository.clearUsageData();
+    const apiKeys = repository.clearApiKeys();
+
+    return {
+      ok: true,
+      settingsRetained: true,
+      usage_logs: usage.usage_logs,
+      daily_summary: usage.daily_summary,
+      weekly_summary: usage.weekly_summary,
+      api_keys: apiKeys,
+    };
+  };
+
+  ipcMain.handle("data:clear-all", clearAllDataHandler);
+
+  ipcMain.handle("app:check-updates", () => {
+    return {
+      ok: true,
+      available: false,
+      currentVersion: app.getVersion(),
+      latestVersion: null,
+      checkedAt: new Date().toISOString(),
+    };
+  });
+
+  ipcMain.handle("app:open-data-directory", (_event, payload: unknown) => {
+    const targetPath = resolveOpenDataDirectoryTarget(payload);
+    const result = shell.openPath(targetPath);
+
+    return Promise.resolve(result).then((error) => ({
+      ok: error.length === 0,
+      path: targetPath,
+      error: error.length === 0 ? undefined : error,
+    }));
+  });
+
+  const getRuntimeSettingsHandler = (): RuntimeSettingsSnapshot => {
+    if (!repository) {
+      return {
+        proxy: {
+          port: DEFAULT_PROXY_PORT,
+          enabled: true,
+          autoStart: true,
+        },
+        providers: [],
+      } satisfies RuntimeSettingsSnapshot;
+    }
+
+    return getRuntimeSnapshot(repository, runtimeBridge);
+  };
+
+  ipcMain.handle("settings:get-runtime", getRuntimeSettingsHandler);
+  ipcMain.handle("settings:get", getRuntimeSettingsHandler);
+
+  const updateRuntimeSettingsHandler = (
+    _event: unknown,
+    payload: unknown,
+  ): RuntimeSettingsUpdateResponse => {
+    if (!repository || !payload || typeof payload !== "object") {
+      return { ok: false, settings: getRuntimeSettingsHandler() };
+    }
+
+    applyRuntimeSettingsUpdate(
+      repository,
+      payload as RuntimeSettingsUpdatePayload,
+    );
+    const settings = refreshRuntimeSnapshot(repository, runtimeBridge);
+    return { ok: true, settings };
+  };
+
+  ipcMain.handle("settings:update-runtime", updateRuntimeSettingsHandler);
+  ipcMain.handle("update-settings", updateRuntimeSettingsHandler);
+
+  const testProviderConnection = (
+    _event: unknown,
+    payload: unknown,
+  ): ProviderConnectionResponse => {
+    if (!repository) {
+      return {
+        ok: false,
+        providerId: "",
+        reachable: false,
+        error: "Settings repository is unavailable.",
+      };
+    }
+
+    const request = validateProviderConnectionPayload(payload);
+    if (!request) {
+      return {
+        ok: false,
+        providerId: "",
+        reachable: false,
+        error: "Invalid provider test payload.",
+      };
+    }
+
+    const snapshot = getRuntimeSnapshot(repository, runtimeBridge);
+    const provider = snapshot.providers.find(
+      (entry) => entry.providerId === request.providerId,
+    );
+
+    if (!provider) {
+      return {
+        ok: false,
+        providerId: request.providerId,
+        reachable: false,
+        error: "Unknown provider.",
+      };
+    }
+
+    const resolvedBaseUrl = request.baseUrl?.trim() || provider.baseUrl;
+    if (!resolvedBaseUrl) {
+      return {
+        ok: false,
+        providerId: request.providerId,
+        reachable: false,
+        error: "Provider base URL is missing.",
+      };
+    }
+
+    try {
+      new URL(resolvedBaseUrl);
+    } catch {
+      return {
+        ok: false,
+        providerId: request.providerId,
+        reachable: false,
+        error: "Invalid provider base URL.",
+      };
+    }
+
+    if (
+      provider.authMode === "inject" &&
+      !provider.hasKey &&
+      !(request.apiKey && request.apiKey.trim())
+    ) {
+      return {
+        ok: false,
+        providerId: request.providerId,
+        reachable: false,
+        error: "No stored API key for inject mode.",
+      };
+    }
+
+    // Stream B only requires status/metadata over IPC. We intentionally do not
+    // return any key material and keep this check side-effect free here.
+    return {
+      ok: true,
+      providerId: request.providerId,
+      reachable: true,
+      authMode: provider.authMode,
+    };
+  };
+
+  ipcMain.handle("provider:test-connection", testProviderConnection);
+  ipcMain.handle("test-api-key", testProviderConnection);
 
   // ---------------------------------------------------------------------------
   // Proxy control handlers

@@ -1270,9 +1270,176 @@ describe("UsageRepository", () => {
     });
   });
 
+  describe("getSettingsMetadata", () => {
+    it("should return settings metadata sorted by key", () => {
+      repo.setSetting("z_key", "1");
+      repo.setSetting("a_key", "2");
+
+      const metadata = repo.getSettingsMetadata();
+      expect(metadata).toHaveLength(2);
+      expect(metadata[0].key).toBe("a_key");
+      expect(metadata[1].key).toBe("z_key");
+      expect(metadata[0].updated_at).toBeDefined();
+    });
+  });
+
+  describe("deleteSetting", () => {
+    it("should delete an existing key and return deleted row count", () => {
+      repo.setSetting("theme", "dark");
+
+      const deleted = repo.deleteSetting("theme");
+      expect(deleted).toBe(1);
+      expect(repo.getSetting("theme")).toBeNull();
+    });
+  });
+
+  describe("clearSettings", () => {
+    it("should remove all settings and return deleted row count", () => {
+      repo.setSetting("theme", "dark");
+      repo.setSetting("currency", "USD");
+
+      const deleted = repo.clearSettings();
+      expect(deleted).toBe(2);
+      expect(repo.getSettingsMetadata()).toHaveLength(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // API keys
+  // -------------------------------------------------------------------------
+
+  describe("API key metadata CRUD", () => {
+    it("should insert and read API key metadata and encrypted value", () => {
+      const inserted = repo.setApiKey("openai", "enc-openai-v1");
+
+      expect(inserted.provider_id).toBe("openai");
+      expect(inserted.is_valid).toBe(true);
+      expect(inserted.last_validated_at).toBeNull();
+      expect(repo.getEncryptedApiKey("openai")).toBe("enc-openai-v1");
+
+      const metadata = repo.getApiKeyMetadata("openai");
+      expect(metadata).not.toBeNull();
+      expect(metadata?.provider_id).toBe("openai");
+    });
+
+    it("should update existing API key for a provider instead of creating another", () => {
+      const first = repo.setApiKey("openai", "enc-openai-v1");
+      const second = repo.setApiKey("openai", "enc-openai-v2");
+
+      expect(second.id).toBe(first.id);
+      expect(repo.getEncryptedApiKey("openai")).toBe("enc-openai-v2");
+    });
+
+    it("should set API key validation metadata", () => {
+      repo.setApiKey("openai", "enc-openai-v1");
+
+      const validatedAt = "2026-04-20T10:00:00.000Z";
+      const updated = repo.setApiKeyValidation("openai", false, validatedAt);
+
+      expect(updated).not.toBeNull();
+      expect(updated?.is_valid).toBe(false);
+      expect(updated?.last_validated_at).toBe(validatedAt);
+    });
+
+    it("should list provider API key metadata with has_api_key state", () => {
+      repo.setApiKey("openai", "enc-openai-v1");
+
+      const metadata = repo.listApiKeyMetadata();
+      const openai = metadata.find((entry) => entry.provider_id === "openai");
+      const anthropic = metadata.find(
+        (entry) => entry.provider_id === "anthropic",
+      );
+
+      expect(openai).toBeDefined();
+      expect(openai?.has_api_key).toBe(true);
+      expect(openai?.is_valid).toBe(true);
+
+      expect(anthropic).toBeDefined();
+      expect(anthropic?.has_api_key).toBe(false);
+      expect(anthropic?.is_valid).toBeNull();
+    });
+
+    it("should delete and clear API keys", () => {
+      repo.setApiKey("openai", "enc-openai-v1");
+      repo.setApiKey("anthropic", "enc-anthropic-v1");
+
+      const deletedOpenai = repo.deleteApiKey("openai");
+      expect(deletedOpenai).toBe(1);
+      expect(repo.getApiKeyMetadata("openai")).toBeNull();
+
+      const cleared = repo.clearApiKeys();
+      expect(cleared).toBe(1);
+      expect(repo.getApiKeyMetadata("anthropic")).toBeNull();
+    });
+  });
+
   // -------------------------------------------------------------------------
   // Cleanup
   // -------------------------------------------------------------------------
+
+  describe("clearUsageData", () => {
+    it("should clear usage logs and summary tables and return counts", () => {
+      repo.insertUsageLog(makeLogInput());
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput(),
+      );
+      repo.upsertWeeklySummary(
+        "2026-04-13",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput(),
+      );
+
+      const result = repo.clearUsageData();
+
+      expect(result).toEqual({
+        usage_logs: 1,
+        daily_summary: 1,
+        weekly_summary: 1,
+      });
+      expect(repo.getUsageLogs({})).toHaveLength(0);
+      expect(repo.getDailySummary({ start: "0001-01-01", end: "9999-12-31" })).toHaveLength(0);
+      expect(
+        repo.getWeeklySummary({ start: "0001-01-01", end: "9999-12-31" }),
+      ).toHaveLength(0);
+    });
+  });
+
+  describe("clearAllData", () => {
+    it("should clear usage, settings, and API keys and return counts", () => {
+      repo.insertUsageLog(makeLogInput());
+      repo.upsertDailySummary(
+        "2026-04-19",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput(),
+      );
+      repo.upsertWeeklySummary(
+        "2026-04-13",
+        "openai",
+        "gpt-4o",
+        makeSummaryInput(),
+      );
+      repo.setSetting("theme", "dark");
+      repo.setApiKey("openai", "enc-openai-v1");
+
+      const result = repo.clearAllData();
+
+      expect(result).toEqual({
+        usage_logs: 1,
+        daily_summary: 1,
+        weekly_summary: 1,
+        settings: 1,
+        api_keys: 1,
+      });
+      expect(repo.getUsageLogs({})).toHaveLength(0);
+      expect(repo.getSettingsMetadata()).toHaveLength(0);
+      expect(repo.getApiKeyMetadata("openai")).toBeNull();
+    });
+  });
 
   describe("deleteUsageBefore", () => {
     it("should delete logs before the given date and return count", () => {
