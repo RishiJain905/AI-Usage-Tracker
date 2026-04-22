@@ -22,8 +22,10 @@
     "build:all": "npm run build && electron-builder --win --mac --linux",
     "release": "npm run build && electron-builder --publish always",
     "generate-icons": "node scripts/generate-icons.js",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "npm run rebuild:test && vitest run",
+    "test:watch": "vitest",
+    "rebuild:test": "cd node_modules/better-sqlite3 && prebuild-install",
+    "rebuild:electron": "electron-builder install-app-deps"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
