@@ -1,0 +1,89 @@
+name: Build & Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: windows-build
+          - os: macos-latest
+            artifact_name: macos-build
+          - os: ubuntu-latest
+            artifact_name: linux-build
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Rebuild native modules for Electron
+        run: npx electron-builder install-app-deps
+
+      - name: Set build timestamp
+        run: echo "BUILD_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+        shell: bash
+
+      - name: Build application
+        run: npx electron-vite build
+
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        run: npx electron-builder --win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build macOS installer
+        if: runner.os == 'macOS'
+        run: npx electron-builder --mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Linux installer
+        if: runner.os == 'Linux'
+        run: npx electron-builder --linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            dist/*.exe
+            dist/*.exe.blockmap
+            dist/*.dmg
+            dist/*.dmg.blockmap
+            dist/*.AppImage
+            dist/*.deb
+            dist/latest.yml
+            dist/latest-mac.yml
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: artifacts/**

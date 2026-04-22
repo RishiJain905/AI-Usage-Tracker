@@ -173,5 +173,9 @@ App-level shortcuts (when window is focused):
 - Task 2 (Proxy Server Core)
 - Task 6 (Dashboard UI Foundation)
 
+## Vitest Unit Tests
+
+**Priority**: None — Purely Electron integration (tray icon, minimize-to-tray, notifications, single instance lock). Depends heavily on Electron APIs that are best tested with E2E/integration tests, not Vitest unit tests.
+
 ## Estimated Time
 2-3 hours

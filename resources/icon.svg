@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Deep cosmic radial gradient -->
+    <radialGradient id="cosmos" cx="35%" cy="30%" r="95%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="40%" stop-color="#4f46e5"/>
+      <stop offset="75%" stop-color="#312e81"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </radialGradient>
+
+    <!-- Inner ambient glow -->
+    <radialGradient id="ambient" cx="50%" cy="45%" r="55%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.5"/>
+      <stop offset="60%" stop-color="#7c3aed" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Soft top glass highlight -->
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="45%" stop-color="#ffffff" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Node radial glow -->
+    <radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="40%" stop-color="#ffffff" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Soft shadow for depth -->
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+
+    <!-- Neon glow filter for lines -->
+    <filter id="neon" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background shape with shadow -->
+  <rect x="48" y="48" width="416" height="416" rx="96" fill="url(#cosmos)" filter="url(#shadow)"/>
+
+  <!-- Ambient purple glow behind icon -->
+  <circle cx="256" cy="256" r="170" fill="url(#ambient)"/>
+
+  <!-- Glass top highlight -->
+  <rect x="48" y="48" width="416" height="208" rx="96" fill="url(#glass)"/>
+
+  <!-- Neural network icon group -->
+  <g transform="translate(256, 256)" filter="url(#neon)">
+    <!-- Outer hexagonal orbit ring -->
+    <path d="M0,-88 L76.2,-44 L76.2,44 L0,88 L-76.2,44 L-76.2,-44 Z"
+          fill="none" stroke="#ffffff" stroke-width="5" opacity="0.85" stroke-linejoin="round"/>
+
+    <!-- Inner triangle connections -->
+    <line x1="0" y1="-44" x2="38.1" y2="22" stroke="#ffffff" stroke-width="4" opacity="0.7" stroke-linecap="round"/>
+    <line x1="0" y1="-44" x2="-38.1" y2="22" stroke="#ffffff" stroke-width="4" opacity="0.7" stroke-linecap="round"/>
+    <line x1="38.1" y1="22" x2="-38.1" y2="22" stroke="#ffffff" stroke-width="4" opacity="0.7" stroke-linecap="round"/>
+
+    <!-- Corner nodes -->
+    <circle cx="0" cy="-44" r="16" fill="#ffffff"/>
+    <circle cx="38.1" cy="22" r="16" fill="#ffffff"/>
+    <circle cx="-38.1" cy="22" r="16" fill="#ffffff"/>
+
+    <!-- Node inner subtle glow -->
+    <circle cx="0" cy="-44" r="24" fill="url(#nodeGlow)" opacity="0.4"/>
+    <circle cx="38.1" cy="22" r="24" fill="url(#nodeGlow)" opacity="0.4"/>
+    <circle cx="-38.1" cy="22" r="24" fill="url(#nodeGlow)" opacity="0.4"/>
+
+    <!-- Central hub -->
+    <circle cx="0" cy="0" r="6" fill="#ffffff" opacity="0.9"/>
+
+    <!-- Bottom accent line (subtle "pulse") -->
+    <line x1="0" y1="88" x2="0" y2="110" stroke="#a855f7" stroke-width="4" opacity="0.6" stroke-linecap="round"/>
+    <circle cx="0" cy="116" r="5" fill="#a855f7" opacity="0.8"/>
+  </g>
+
+  <!-- Tiny corner accent dot -->
+  <circle cx="376" cy="376" r="8" fill="#a855f7" opacity="0.9"/>
+</svg>

@@ -1,0 +1,82 @@
+appId: com.terratch.ai-usage-tracker
+productName: AI Usage Tracker
+copyright: Copyright © 2024 TerraWatch
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - "!**/.vscode/*"
+  - "!src/*"
+  - "!docs/*"
+  - "!Workflows/*"
+  - "!electron.vite.config.{js,ts,mjs,cjs}"
+  - "!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}"
+  - "!{.env,.env.*,.npmrc,pnpm-lock.yaml}"
+  - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
+
+asarUnpack:
+  - resources/**
+  - "**/better-sqlite3/**"
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.ico
+  executableName: ai-usage-tracker
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: resources/icon.icns
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: false
+  extendInfo:
+    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  icon: resources/icon.png
+  maintainer: terratch.com
+  category: Development
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: AI Usage Tracker
+  uninstallDisplayName: AI Usage Tracker
+  artifactName: ${name}-${version}-setup.${ext}
+
+dmg:
+  artifactName: ${name}-${version}.${ext}
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+appImage:
+  artifactName: ${name}-${version}.${ext}
+
+npmRebuild: false
+
+publish:
+  provider: github
+  owner: terratch
+  repo: ai-usage-tracker
