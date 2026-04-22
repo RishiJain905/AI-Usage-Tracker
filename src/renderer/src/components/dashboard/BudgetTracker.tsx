@@ -62,9 +62,7 @@ export default function BudgetTracker({
           Monthly Budget: {formatCost(monthlyBudget)}
         </div>
 
-        <div className={indicatorColor}>
-          <Progress value={percentage} />
-        </div>
+        <Progress value={percentage} indicatorClassName={indicatorColor} />
 
         <div className="text-sm">
           {formatCost(currentSpend)} / {formatCost(monthlyBudget)} (

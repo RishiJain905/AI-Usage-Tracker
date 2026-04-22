@@ -114,7 +114,9 @@ interface UsageLog {
 
 interface UsageFilters {
   providerId?: string;
+  providerIds?: string[];
   modelId?: string;
+  modelIds?: string[];
   startDate?: string;
   endDate?: string;
   limit?: number;
@@ -296,6 +298,7 @@ interface ProxyAPI {
 
   // Database — trends
   dbGetUsageTrend: (days: number) => Promise<DailyTrend[]>;
+  dbGetModelUsageTrend: (modelId: string, days: number) => Promise<DailyTrend[]>;
   dbGetWeeklyTrend: (weeks: number) => Promise<WeeklyTrend[]>;
 
   // Database — summaries by date range

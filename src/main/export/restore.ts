@@ -14,6 +14,8 @@ import { format } from "date-fns";
 export interface RestoreResult {
   success: boolean;
   preRestoreBackupPath?: string;
+  pendingRestorePath?: string;
+  restartRequired?: boolean;
   error?: string;
 }
 
@@ -122,6 +124,7 @@ export async function restoreDatabase(
       "backups",
       `ai-tracker-pre-restore-${timestamp}.db`,
     );
+    const targetDbPath = path.join(appDataPath, "ai-tracker.db");
 
     const backupDir = path.dirname(preRestoreBackupPath);
     if (!fs.existsSync(backupDir)) {
@@ -130,15 +133,14 @@ export async function restoreDatabase(
 
     // Backup the current database before restoring
     await db.backup(preRestoreBackupPath);
-
-    // Note: We cannot safely replace the database file while the current
-    // process has it open. The caller must restart the application to
-    // apply the restore. We return the pre-restore backup path so the
-    // caller can handle the actual file swap on restart.
+    db.close();
+    fs.copyFileSync(backupPath, targetDbPath);
 
     return {
       success: true,
       preRestoreBackupPath,
+      pendingRestorePath: targetDbPath,
+      restartRequired: true,
     };
   } catch (err) {
     return {

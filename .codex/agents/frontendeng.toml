@@ -1,4 +1,4 @@
-name = "frontendend"
+name = "frontendeng"
 description = """Use this agent when you need to build or implement user interfaces using
   modern frontend frameworks (React, Vue, Svelte, Angular, etc.) where
   accessibility, performance, and user experience are priorities. Examples

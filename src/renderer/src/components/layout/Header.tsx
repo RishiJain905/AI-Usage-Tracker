@@ -13,6 +13,7 @@ import {
 import { useUsageStore } from "@/stores/usageStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { getEffectiveTheme } from "@/lib/theme";
+import { PERIOD_LABELS } from "@/components/dashboard/PeriodSelector";
 import type { Period } from "@/types/usage";
 
 function formatTokenCount(count: number): string {
@@ -24,13 +25,6 @@ function formatTokenCount(count: number): string {
 function formatCost(cost: number): string {
   return `$${cost.toFixed(2)}`;
 }
-
-const PERIOD_LABELS: Record<Period, string> = {
-  today: "Today",
-  week: "This Week",
-  month: "This Month",
-  all: "All Time",
-};
 
 function ThemeIcon({
   theme,
@@ -61,6 +55,11 @@ export default function Header(): React.JSX.Element {
   const totalTokens = aggregateTotal?.total_tokens ?? 0;
   const totalCost = aggregateTotal?.total_cost ?? 0;
   const topModel = topModels.length > 0 ? topModels[0] : null;
+  const proxyStatusLabel = isProxyRunning
+    ? proxyPort != null
+      ? `Running :${proxyPort}`
+      : "Running"
+    : "Stopped";
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
@@ -86,14 +85,14 @@ export default function Header(): React.JSX.Element {
                 isProxyRunning ? "bg-green-500" : "bg-red-500"
               }`}
             />
-            <span className="text-xs">
-              {isProxyRunning ? `Running :${proxyPort ?? ""}` : "Stopped"}
-            </span>
+            <span className="text-xs">{proxyStatusLabel}</span>
           </Badge>
         </TooltipTrigger>
         <TooltipContent>
           {isProxyRunning
-            ? `Proxy is running on port ${proxyPort}`
+            ? proxyPort != null
+              ? `Proxy is running on port ${proxyPort}`
+              : "Proxy is running"
             : "Proxy is not running"}
         </TooltipContent>
       </Tooltip>

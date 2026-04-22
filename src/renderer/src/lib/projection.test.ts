@@ -13,8 +13,8 @@ describe("calculateProjection", () => {
     expect(calculateProjection(100, 15, 30)).toBe(200);
   });
 
-  it("returns currentSpend * daysInMonth on day 1 to avoid div-by-zero", () => {
-    expect(calculateProjection(50, 0, 30)).toBe(1500);
+  it("returns 0 when daysElapsed is 0", () => {
+    expect(calculateProjection(50, 0, 30)).toBe(0);
   });
 
   it("returns 0 projected when currentSpend is 0", () => {

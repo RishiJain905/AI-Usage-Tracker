@@ -120,7 +120,9 @@ export interface UsageLog {
 // Usage filters
 export interface UsageFilters {
   providerId?: string;
+  providerIds?: string[];
   modelId?: string;
+  modelIds?: string[];
   startDate?: string;
   endDate?: string;
   limit?: number;

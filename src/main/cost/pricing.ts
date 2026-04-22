@@ -42,6 +42,8 @@ const EXTRA_DEFAULTS: ModelPricing[] = [
     modelId: "dall-e-3",
     inputCostPerMillion: 0,
     outputCostPerMillion: 0,
+    cachedReadMultiplier: 1,
+    cachedWriteMultiplier: 1,
     imageCostPerImage: 0.04,
   },
   {
@@ -49,6 +51,8 @@ const EXTRA_DEFAULTS: ModelPricing[] = [
     modelId: "dall-e-2",
     inputCostPerMillion: 0,
     outputCostPerMillion: 0,
+    cachedReadMultiplier: 1,
+    cachedWriteMultiplier: 1,
     imageCostPerImage: 0.02,
   },
 ];
@@ -74,9 +78,9 @@ function mergePricing(
     outputCostPerMillion:
       override.outputCostPerMillion ?? base?.outputCostPerMillion ?? 0,
     cachedReadMultiplier:
-      override.cachedReadMultiplier ?? base?.cachedReadMultiplier ?? 0,
+      override.cachedReadMultiplier ?? base?.cachedReadMultiplier ?? 1,
     cachedWriteMultiplier:
-      override.cachedWriteMultiplier ?? base?.cachedWriteMultiplier ?? 0,
+      override.cachedWriteMultiplier ?? base?.cachedWriteMultiplier ?? 1,
     imageCostPerImage:
       override.imageCostPerImage ?? base?.imageCostPerImage ?? 0,
     batchDiscount: override.batchDiscount ?? base?.batchDiscount ?? 0,
@@ -91,8 +95,8 @@ export function getDefaultPricingCatalog(): ModelPricing[] {
     inputCostPerMillion: model.inputPrice,
     outputCostPerMillion: model.outputPrice,
     isLocal: model.isLocal ?? false,
-    cachedReadMultiplier: 0,
-    cachedWriteMultiplier: 0,
+    cachedReadMultiplier: 1,
+    cachedWriteMultiplier: 1,
     imageCostPerImage: 0,
     batchDiscount: 0,
   }));

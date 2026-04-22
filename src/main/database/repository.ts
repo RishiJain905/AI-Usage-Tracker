@@ -160,6 +160,32 @@ function rowToProviderApiKeyMetadata(
   };
 }
 
+function normalizeFilterValues(value?: string | string[]): string[] {
+  if (typeof value === "string") {
+    return value.trim().length > 0 ? [value.trim()] : [];
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+
+  return [];
+}
+
+function buildInClause(values: string[]): { sql: string; params: string[] } {
+  if (values.length === 0) {
+    return { sql: "", params: [] };
+  }
+
+  return {
+    sql: `(${values.map(() => "?").join(", ")})`,
+    params: values,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // UsageRepository
 // ---------------------------------------------------------------------------
@@ -196,6 +222,8 @@ export class UsageRepository {
     setSetting: Database.Statement;
     deleteSetting: Database.Statement;
     clearSettings: Database.Statement;
+    ensureProvider: Database.Statement;
+    ensureModel: Database.Statement;
     getApiKeyByProvider: Database.Statement;
     listApiKeyMetadata: Database.Statement;
     getProviderApiKeyMetadata: Database.Statement;
@@ -207,6 +235,8 @@ export class UsageRepository {
     clearUsageLogs: Database.Statement;
     clearDailySummary: Database.Statement;
     clearWeeklySummary: Database.Statement;
+    deleteDailySummaryByDate: Database.Statement;
+    deleteWeeklySummaryByWeekStart: Database.Statement;
     deleteUsageBefore: Database.Statement;
     upsertDailyInsert: Database.Statement;
     upsertDailyUpdate: Database.Statement;
@@ -536,6 +566,18 @@ export class UsageRepository {
       DELETE FROM settings
     `);
 
+    this.stmts.ensureProvider = db.prepare(`
+      INSERT OR IGNORE INTO providers (id, name, base_url, icon)
+      VALUES (?, ?, ?, NULL)
+    `);
+
+    this.stmts.ensureModel = db.prepare(`
+      INSERT OR IGNORE INTO models (
+        id, provider_id, name, input_price_per_million,
+        output_price_per_million, is_local
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
     // -- API keys --------------------------------------------------------------
     this.stmts.getApiKeyByProvider = db.prepare(`
       SELECT id, provider_id, encrypted_key, is_valid, last_validated_at, created_at
@@ -620,6 +662,14 @@ export class UsageRepository {
 
     this.stmts.clearWeeklySummary = db.prepare(`
       DELETE FROM weekly_summary
+    `);
+
+    this.stmts.deleteDailySummaryByDate = db.prepare(`
+      DELETE FROM daily_summary WHERE date = ?
+    `);
+
+    this.stmts.deleteWeeklySummaryByWeekStart = db.prepare(`
+      DELETE FROM weekly_summary WHERE week_start = ?
     `);
 
     this.stmts.deleteUsageBefore = db.prepare(`
@@ -933,6 +983,49 @@ export class UsageRepository {
   // ---------------------------------------------------------------------------
 
   getUsageLogs(filters: UsageFilters): UsageLog[] {
+    const providerIds = normalizeFilterValues(
+      filters.providerIds ?? filters.providerId,
+    );
+    const modelIds = normalizeFilterValues(filters.modelIds ?? filters.modelId);
+
+    if (providerIds.length > 0 || modelIds.length > 0) {
+      const clauses: string[] = [];
+      const params: Array<string | number> = [];
+
+      if (providerIds.length > 0) {
+        const clause = buildInClause(providerIds);
+        clauses.push(`provider_id IN ${clause.sql}`);
+        params.push(...clause.params);
+      }
+
+      if (modelIds.length > 0) {
+        const clause = buildInClause(modelIds);
+        clauses.push(`model_id IN ${clause.sql}`);
+        params.push(...clause.params);
+      }
+
+      if (filters.startDate) {
+        clauses.push("date(requested_at) >= ?");
+        params.push(filters.startDate);
+      }
+
+      if (filters.endDate) {
+        clauses.push("date(requested_at) <= ?");
+        params.push(filters.endDate);
+      }
+
+      const limit = filters.limit ?? 100;
+      const offset = filters.offset ?? 0;
+      const sql = `
+        SELECT * FROM usage_logs
+        ${clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : ""}
+        ORDER BY requested_at DESC
+        LIMIT ? OFFSET ?
+      `;
+
+      return this.db.prepare(sql).all(...params, limit, offset) as UsageLog[];
+    }
+
     return this.stmts.getUsageLogs.all(
       filters.providerId ?? null,
       filters.modelId ?? null,
@@ -1178,6 +1271,65 @@ export class UsageRepository {
       "yyyy-MM-dd",
     );
     return this.stmts.getWeeklyTrend.all(start) as WeeklyTrend[];
+  }
+
+  getModelUsageTrend(modelId: string, days: number): DailyTrend[] {
+    const start = format(subDays(new Date(), days), "yyyy-MM-dd");
+    return this.db
+      .prepare(
+        `
+        SELECT
+          date,
+          SUM(prompt_tokens) AS prompt_tokens,
+          SUM(completion_tokens) AS completion_tokens,
+          SUM(total_tokens) AS total_tokens,
+          SUM(total_cost) AS total_cost,
+          SUM(request_count) AS request_count
+        FROM daily_summary
+        WHERE model_id = ? AND date >= ?
+        GROUP BY date
+        ORDER BY date ASC
+      `,
+      )
+      .all(modelId, start) as DailyTrend[];
+  }
+
+  ensureProviderAndModel(
+    providerId: string,
+    modelId: string,
+    options?: {
+      providerName?: string;
+      providerBaseUrl?: string;
+      modelName?: string;
+      inputPricePerMillion?: number;
+      outputPricePerMillion?: number;
+      isLocal?: boolean;
+    },
+  ): void {
+    const providerName = options?.providerName?.trim() || providerId;
+    const providerBaseUrl =
+      options?.providerBaseUrl?.trim() || "https://example.invalid";
+    const modelName = options?.modelName?.trim() || modelId;
+
+    this.stmts.ensureProvider.run(providerId, providerName, providerBaseUrl);
+    this.stmts.ensureModel.run(
+      modelId,
+      providerId,
+      modelName,
+      options?.inputPricePerMillion ?? 0,
+      options?.outputPricePerMillion ?? 0,
+      options?.isLocal ? 1 : 0,
+    );
+  }
+
+  deleteDailySummaryByDate(date: string): number {
+    const result = this.stmts.deleteDailySummaryByDate.run(date);
+    return result.changes;
+  }
+
+  deleteWeeklySummaryByWeekStart(weekStart: string): number {
+    const result = this.stmts.deleteWeeklySummaryByWeekStart.run(weekStart);
+    return result.changes;
   }
 
   // ---------------------------------------------------------------------------

@@ -73,6 +73,13 @@ interface UsageState {
 
 const api = typeof window !== "undefined" ? window.api : null;
 
+const TREND_WINDOWS: Record<Period, { days: number; weeks: number }> = {
+  today: { days: 1, weeks: 1 },
+  week: { days: 7, weeks: 1 },
+  month: { days: 30, weeks: 4 },
+  all: { days: 365, weeks: 52 },
+};
+
 export const useUsageStore = create<UsageState>((set, get) => ({
   // State
   period: "today",
@@ -165,33 +172,33 @@ export const useUsageStore = create<UsageState>((set, get) => ({
     }
   },
 
-  fetchDailyTrend: async (days = 30) => {
+  fetchDailyTrend: async (days?: number) => {
     if (!api) return;
     try {
-      const dailyTrend = await api.dbGetUsageTrend(days);
+      const resolvedDays = days ?? TREND_WINDOWS[get().period].days;
+      const dailyTrend = await api.dbGetUsageTrend(resolvedDays);
       set({ dailyTrend });
     } catch (error) {
       set({ error: String(error) });
     }
   },
 
-  fetchWeeklyTrend: async (weeks = 12) => {
+  fetchWeeklyTrend: async (weeks?: number) => {
     if (!api) return;
     try {
-      const weeklyTrend = await api.dbGetWeeklyTrend(weeks);
+      const resolvedWeeks = weeks ?? TREND_WINDOWS[get().period].weeks;
+      const weeklyTrend = await api.dbGetWeeklyTrend(resolvedWeeks);
       set({ weeklyTrend });
     } catch (error) {
       set({ error: String(error) });
     }
   },
 
-  fetchModelDailyTrend: async (modelId: string, days = 30) => {
+  fetchModelDailyTrend: async (modelId: string, days?: number) => {
     if (!api) return;
     try {
-      // Fetch all daily summaries and filter by model
-      // The API doesn't have a direct model-daily-trend method,
-      // so we fetch daily trend data and store it keyed by modelId
-      const trend = await api.dbGetUsageTrend(days);
+      const resolvedDays = days ?? TREND_WINDOWS[get().period].days;
+      const trend = await api.dbGetModelUsageTrend(modelId, resolvedDays);
       set((state) => ({
         modelDailyTrends: {
           ...state.modelDailyTrends,
@@ -329,6 +336,7 @@ export const useUsageStore = create<UsageState>((set, get) => ({
       fetchModels,
       fetchUsageLogs,
       fetchDailySummaries,
+      fetchModelDailyTrend,
     } = get();
     set({ isLoading: true, error: null });
     try {
@@ -345,6 +353,11 @@ export const useUsageStore = create<UsageState>((set, get) => ({
         fetchUsageLogs({ limit: 50, offset: 0 }),
         fetchDailySummaries(),
       ]);
+
+      const topModelIds = get()
+        .allModelSummaries.slice(0, 10)
+        .map((summary) => summary.model_id);
+      await Promise.all(topModelIds.map((modelId) => fetchModelDailyTrend(modelId)));
     } catch (error) {
       set({ error: String(error) });
     } finally {

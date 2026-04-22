@@ -1,5 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { formatTokens, formatCost } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { Period } from "@/types/usage";
 import type { ProviderAggregate } from "@/hooks/useProviderData";
 
@@ -40,6 +41,7 @@ export default function ProviderCard({
   totalTokens,
   onClick,
 }: ProviderCardProps): React.JSX.Element {
+  const isInteractive = typeof onClick === "function";
   const percentage =
     totalTokens && totalTokens > 0
       ? (provider.total_tokens / totalTokens) * 100
@@ -50,12 +52,15 @@ export default function ProviderCard({
 
   return (
     <Card
-      className="gap-3 py-4 transition-colors cursor-pointer hover:bg-accent/50"
+      className={cn(
+        "gap-3 py-4 transition-colors",
+        isInteractive && "cursor-pointer hover:bg-accent/50",
+      )}
       onClick={onClick}
-      role="button"
-      tabIndex={0}
+      role={isInteractive ? "button" : undefined}
+      tabIndex={isInteractive ? 0 : undefined}
       onKeyDown={
-        onClick
+        isInteractive
           ? (e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { DollarSign, TrendingUp, Activity, Wallet } from "lucide-react";
 import { useUsageStore } from "@/stores/usageStore";
 import MetricCard from "@/components/dashboard/MetricCard";
@@ -70,9 +70,6 @@ export default function CostView(): React.JSX.Element {
   const dailySummaries = useUsageStore((s) => s.dailySummaries);
   const isLoading = useUsageStore((s) => s.isLoading);
   const error = useUsageStore((s) => s.error);
-  const fetchAll = useUsageStore((s) => s.fetchAll);
-  const fetchDailySummaries = useUsageStore((s) => s.fetchDailySummaries);
-  const setupEventListeners = useUsageStore((s) => s.setupEventListeners);
 
   // Compute provider summary data from modelBreakdown
   const providerSummaryData: ProviderSummary[] = useMemo(() => {
@@ -105,19 +102,6 @@ export default function CostView(): React.JSX.Element {
     [dailyTrend],
   );
 
-  // Initial fetch and event listeners
-  useEffect(() => {
-    fetchAll();
-    fetchDailySummaries();
-    const cleanup = setupEventListeners();
-    return cleanup;
-  }, [fetchAll, fetchDailySummaries, setupEventListeners]);
-
-  // Re-fetch daily summaries when period changes
-  useEffect(() => {
-    fetchDailySummaries();
-  }, [period, fetchDailySummaries]);
-
   if (error) {
     return (
       <div className="space-y-6">
@@ -125,8 +109,7 @@ export default function CostView(): React.JSX.Element {
           title="Failed to load cost data"
           message={error}
           onRetry={() => {
-            fetchAll();
-            fetchDailySummaries();
+            useUsageStore.getState().fetchAll();
           }}
         />
       </div>

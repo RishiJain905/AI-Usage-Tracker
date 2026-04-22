@@ -1,7 +1,7 @@
-import type { Period } from "@/types/usage";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { Period } from "@/types/usage";
 
-const PERIOD_LABELS: Record<Period, string> = {
+export const PERIOD_LABELS: Record<Period, string> = {
   today: "Today",
   week: "This Week",
   month: "This Month",

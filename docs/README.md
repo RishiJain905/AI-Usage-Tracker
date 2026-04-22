@@ -1,4 +1,4 @@
-# AI Usage Tracker — Implementation Tasks
+# AI Usage Tracker — Implementation Tasks (01-15)
 
 ## Overview
 
@@ -78,9 +78,9 @@ Every metric, chart, and table must respect the global **period selector**:
 
 | Phase | Tasks | Status |
 |-------|-------|--------|
-| Feature Development | 01-13 | Done |
-| Build & Release | 14 | Ready for execution |
-| Final Polish & QA | 15 | Ready for execution |
+| Feature Development | 01-15 | Done |
+| Build & Release | 14 | Done |
+| Final Polish & QA | 15 | Done |
 
 After Task 15, the app is **production-ready** for official deployment.
 

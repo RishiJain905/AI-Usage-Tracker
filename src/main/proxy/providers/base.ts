@@ -13,7 +13,7 @@ export interface Provider {
   transformRequest(request: ProxyRequest): TransformedRequest;
   extractUsage(requestBody: any, responseBody: any): TokenUsage | null;
   extractUsageFromChunks(chunks: string[]): TokenUsage | null;
-  extractModel(requestBody: any): string;
+  extractModel(requestBody: any, requestPath?: string): string;
   getDisplayName(): string;
 }
 
@@ -25,7 +25,7 @@ export abstract class OpenAICompatibleProvider implements Provider {
 
   transformRequest(request: ProxyRequest): TransformedRequest {
     return {
-      url: `${this.baseUrl}${request.endpoint}`,
+      url: new URL(request.endpoint, this.baseUrl).toString(),
       headers: { ...request.headers },
       body: request.body,
     };
@@ -98,7 +98,7 @@ export abstract class OpenAICompatibleProvider implements Provider {
     return null;
   }
 
-  extractModel(requestBody: any): string {
+  extractModel(requestBody: any, _requestPath?: string): string {
     return requestBody?.model ?? "";
   }
 

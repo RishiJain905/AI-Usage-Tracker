@@ -61,9 +61,9 @@ describe("validateBudget", () => {
     expect(validateBudget("200.50")).toBeNull();
   });
 
-  it("rejects zero, negative, and non-numeric values", () => {
-    expect(validateBudget(0)).toBe("Budget must be greater than 0.");
-    expect(validateBudget(-10)).toBe("Budget must be greater than 0.");
+  it("rejects negative and non-numeric values", () => {
+    expect(validateBudget(0)).toBeNull();
+    expect(validateBudget(-10)).toBe("Budget must be greater than or equal to 0.");
     expect(validateBudget("NaN")).toBe("Budget must be a number.");
   });
 });

@@ -38,7 +38,7 @@ export class OllamaProvider implements Provider {
 
   transformRequest(request: ProxyRequest): TransformedRequest {
     return {
-      url: `${this._baseUrl}${request.endpoint}`,
+      url: new URL(request.endpoint, this._baseUrl).toString(),
       headers: { ...request.headers },
       body: request.body,
     };
@@ -149,7 +149,7 @@ export class OllamaProvider implements Provider {
     };
   }
 
-  extractModel(requestBody: any): string {
+  extractModel(requestBody: any, _requestPath?: string): string {
     return requestBody?.model ?? "";
   }
 

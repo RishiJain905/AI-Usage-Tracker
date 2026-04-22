@@ -660,6 +660,8 @@ function attachProxyEventListeners(
       const providerId = usage.providerId || data.provider || "unknown";
       const cost = costCalculator.calculate(usage);
 
+      repository.ensureProviderAndModel(providerId, modelId);
+
       repository.insertUsageLog({
         provider_id: providerId,
         model_id: modelId,
@@ -743,9 +745,14 @@ function attachProxyEventListeners(
 
       maybeNotifyBudgetThreshold(completedAt);
     } else if (repository) {
+      const providerId = data.provider ?? "unknown";
+      const modelId = data.model || "unknown";
+
+      repository.ensureProviderAndModel(providerId, modelId);
+
       repository.insertUsageLog({
-        provider_id: data.provider ?? "unknown",
-        model_id: data.model || "unknown",
+        provider_id: providerId,
+        model_id: modelId,
         endpoint: data.endpoint,
         method: data.method,
         prompt_tokens: 0,

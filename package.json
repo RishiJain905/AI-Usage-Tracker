@@ -39,7 +39,6 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
-    "http": "^0.0.1-security",
     "http-proxy-middleware": "^3.0.5",
     "electron-updater": "^6.3.9",
     "lucide-react": "^1.8.0",

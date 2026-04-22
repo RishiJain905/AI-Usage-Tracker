@@ -12,7 +12,7 @@ export class AnthropicProvider implements Provider {
 
   transformRequest(request: ProxyRequest): TransformedRequest {
     return {
-      url: `${this.baseUrl}${request.endpoint}`,
+      url: new URL(request.endpoint, this.baseUrl).toString(),
       headers: { ...request.headers },
       body: request.body,
     };
@@ -82,7 +82,7 @@ export class AnthropicProvider implements Provider {
     };
   }
 
-  extractModel(requestBody: any): string {
+  extractModel(requestBody: any, _requestPath?: string): string {
     return requestBody?.model ?? "";
   }
 

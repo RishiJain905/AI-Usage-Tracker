@@ -104,7 +104,7 @@ export default function ModelRanking({
   // Build stable provider → color index map
   const providerColorMap = useMemo(() => {
     const map = new Map<string, string>();
-    const uniqueProviders = [...new Set(models.map((m) => m.provider_id))];
+    const uniqueProviders = [...new Set(models.map((m) => m.provider_id))].sort();
     uniqueProviders.forEach((pid, idx) => {
       map.set(pid, COLORS[idx % COLORS.length]);
     });

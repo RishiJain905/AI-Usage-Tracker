@@ -107,8 +107,8 @@ export function validateBudget(value: unknown): string | null {
     return "Budget must be a number.";
   }
 
-  if (parsed <= 0) {
-    return "Budget must be greater than 0.";
+  if (parsed < 0) {
+    return "Budget must be greater than or equal to 0.";
   }
 
   return null;

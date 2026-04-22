@@ -15,7 +15,7 @@ export class GeminiProvider implements Provider {
     // Gemini uses URL param `key=` for auth, not header auth
     // The proxy server handles key injection already, so just forward
     return {
-      url: `${this.baseUrl}${request.endpoint}`,
+      url: new URL(request.endpoint, this.baseUrl).toString(),
       headers: { ...request.headers },
       body: request.body,
     };
@@ -94,11 +94,15 @@ export class GeminiProvider implements Provider {
     };
   }
 
-  extractModel(requestBody: any): string {
-    // Gemini passes model in the URL path, not body
-    // The request body may not have a model field
-    // Fallback: try to get from body, otherwise empty string
-    return requestBody?.model ?? "";
+  extractModel(requestBody: any, requestPath?: string): string {
+    if (typeof requestPath === "string") {
+      const match = requestPath.match(/\/models\/([^/:?]+)(?::|\/|$)/);
+      if (match?.[1]) {
+        return match[1];
+      }
+    }
+
+    return requestBody?.model ?? requestBody?.modelId ?? "";
   }
 
   getDisplayName(): string {

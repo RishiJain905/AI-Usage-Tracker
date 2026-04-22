@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from "react";
 import {
-  BrowserRouter,
+  HashRouter,
   Navigate,
   Route,
   Routes,
@@ -33,9 +33,9 @@ type AppCommand =
 
 function App(): React.JSX.Element {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <AppShell />
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 

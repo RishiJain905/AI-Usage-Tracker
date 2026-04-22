@@ -10,7 +10,7 @@ export function calculateProjection(
   daysElapsed: number,
   daysInMonth: number,
 ): number {
-  if (daysElapsed === 0) return currentSpend * daysInMonth;
+  if (daysElapsed === 0) return 0;
   return (currentSpend / daysElapsed) * daysInMonth;
 }
 

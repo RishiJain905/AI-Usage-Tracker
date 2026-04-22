@@ -205,7 +205,11 @@ export class ZhipuAiSync {
     repository: UsageRepository,
     affectedDates: Set<string>,
   ): void {
+    const affectedWeeks = new Set<string>();
+
     for (const date of affectedDates) {
+      repository.deleteDailySummaryByDate(date);
+
       // Get all logs for this date and provider
       const logs = repository.getUsageLogs({
         providerId: this.providerId,
@@ -241,6 +245,33 @@ export class ZhipuAiSync {
       }
 
       // Upsert weekly summary
+      const weekStart = format(
+        startOfWeek(new Date(date), { weekStartsOn: 1 }),
+        "yyyy-MM-dd",
+      );
+      affectedWeeks.add(weekStart);
+    }
+
+    for (const weekStart of affectedWeeks) {
+      repository.deleteWeeklySummaryByWeekStart(weekStart);
+    }
+
+    for (const date of affectedDates) {
+      const logs = repository.getUsageLogs({
+        providerId: this.providerId,
+        startDate: date,
+        endDate: date,
+        limit: 100000,
+        offset: 0,
+      });
+
+      const byModel = new Map<string, typeof logs>();
+      for (const log of logs) {
+        const existing = byModel.get(log.model_id) ?? [];
+        existing.push(log);
+        byModel.set(log.model_id, existing);
+      }
+
       const weekStart = format(
         startOfWeek(new Date(date), { weekStartsOn: 1 }),
         "yyyy-MM-dd",

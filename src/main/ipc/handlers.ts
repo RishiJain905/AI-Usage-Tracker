@@ -496,6 +496,13 @@ export function registerProxyIpcHandlers(
     return repository?.getUsageTrend(days);
   });
 
+  ipcMain.handle(
+    "db:get-model-usage-trend",
+    (_event, modelId: string, days: number) => {
+      return repository?.getModelUsageTrend(modelId, days);
+    },
+  );
+
   ipcMain.handle("db:get-weekly-trend", (_event, weeks: number) => {
     return repository?.getWeeklyTrend(weeks);
   });
@@ -591,11 +598,19 @@ export function registerProxyIpcHandlers(
     if (isSecretSettingKey(key)) {
       return false;
     }
-    repository?.setSetting(key, value);
-    if (key === APP_SETTINGS_KEY && repository) {
-      refreshRuntimeSnapshot(repository, runtimeBridge);
+    if (!repository) {
+      return false;
     }
-    return true;
+    try {
+      repository.setSetting(key, value);
+      if (key === APP_SETTINGS_KEY) {
+        refreshRuntimeSnapshot(repository, runtimeBridge);
+      }
+      return true;
+    } catch (error) {
+      console.warn("[IPC] db:set-setting failed:", error);
+      return false;
+    }
   });
 
   // ---------------------------------------------------------------------------
@@ -1105,7 +1120,7 @@ export function registerProxyIpcHandlers(
       try {
         const appDataPath = app.getPath("userData");
         const pathModule = await import("path");
-        const dbPath = pathModule.join(appDataPath, "ai-usage-tracker.db");
+        const dbPath = pathModule.join(appDataPath, "ai-tracker.db");
 
         const { backupDatabase } =
           require("../export/backup") as typeof import("../export/backup");

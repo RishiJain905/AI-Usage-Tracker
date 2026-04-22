@@ -31,7 +31,7 @@ export default function RecentActivity({
     if (scrollRef.current && logs.length > 0) {
       scrollRef.current.scrollTop = 0;
     }
-  }, [logs.length]);
+  }, [logs[0]?.id]);
 
   if (loading) {
     return (

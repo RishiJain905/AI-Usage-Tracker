@@ -7,8 +7,6 @@ export class PricingUpdater {
     override: Partial<ModelPricing> &
       Pick<ModelPricing, "providerId" | "modelId">,
   ): ModelPricing {
-    const pricing = this.store.setOverride(override);
-    this.store.markUpdated();
-    return pricing;
+    return this.store.setOverride(override);
   }
 }

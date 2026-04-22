@@ -63,53 +63,22 @@ export function exportToJson(
   }
 
   // Build filters and fetch logs
-  let allLogs: UsageLog[] = [];
+  const filters: UsageFilters = {
+    startDate,
+    endDate,
+    limit: Number.MAX_SAFE_INTEGER,
+    offset: 0,
+  };
 
   if (providers && providers.length > 0) {
-    for (const providerId of providers) {
-      if (models && models.length > 0) {
-        for (const modelId of models) {
-          const filters: UsageFilters = {
-            providerId,
-            modelId,
-            startDate,
-            endDate,
-            limit: 100000,
-            offset: 0,
-          };
-          allLogs = allLogs.concat(repository.getUsageLogs(filters));
-        }
-      } else {
-        const filters: UsageFilters = {
-          providerId,
-          startDate,
-          endDate,
-          limit: 100000,
-          offset: 0,
-        };
-        allLogs = allLogs.concat(repository.getUsageLogs(filters));
-      }
-    }
-  } else if (models && models.length > 0) {
-    for (const modelId of models) {
-      const filters: UsageFilters = {
-        modelId,
-        startDate,
-        endDate,
-        limit: 100000,
-        offset: 0,
-      };
-      allLogs = allLogs.concat(repository.getUsageLogs(filters));
-    }
-  } else {
-    const filters: UsageFilters = {
-      startDate,
-      endDate,
-      limit: 100000,
-      offset: 0,
-    };
-    allLogs = repository.getUsageLogs(filters);
+    filters.providerIds = providers;
   }
+
+  if (models && models.length > 0) {
+    filters.modelIds = models;
+  }
+
+  const allLogs = repository.getUsageLogs(filters);
 
   // Sort by requested_at ascending
   allLogs.sort(

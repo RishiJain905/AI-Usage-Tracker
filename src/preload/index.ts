@@ -79,6 +79,8 @@ const api = {
     ipcRenderer.invoke("db:get-top-models", limit, period),
   dbGetUsageTrend: (days: number) =>
     ipcRenderer.invoke("db:get-usage-trend", days),
+  dbGetModelUsageTrend: (modelId: string, days: number) =>
+    ipcRenderer.invoke("db:get-model-usage-trend", modelId, days),
   dbGetWeeklyTrend: (weeks: number) =>
     ipcRenderer.invoke("db:get-weekly-trend", weeks),
   dbGetDailySummary: (start: string, end: string) =>

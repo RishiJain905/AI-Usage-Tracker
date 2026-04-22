@@ -68,9 +68,12 @@ export async function checkForUpdates(): Promise<{
   try {
     const result = await autoUpdater.checkForUpdates();
     const updateInfo = result?.updateInfo ?? null;
+    const available =
+      updateInfo !== null &&
+      autoUpdater.currentVersion.compare(updateInfo.version) < 0;
     return {
       ok: true,
-      available: updateInfo !== null,
+      available,
       currentVersion: autoUpdater.currentVersion.toString(),
       latestVersion: updateInfo?.version ?? null,
       checkedAt: new Date().toISOString(),

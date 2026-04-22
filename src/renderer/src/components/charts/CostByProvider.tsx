@@ -7,33 +7,12 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatCost } from "@/lib/format";
+import { FALLBACK_COLORS, PROVIDER_COLORS } from "@/lib/providerColors";
 import type { ProviderSummary } from "@/types/usage";
-
-const PROVIDER_COLORS: Record<string, string> = {
-  openai: "#10a37f",
-  anthropic: "#d4a574",
-  ollama: "#6366f1",
-  glm: "#3b82f6",
-  minimax: "#f59e0b",
-  gemini: "#8b5cf6",
-  mistral: "#ef4444",
-  groq: "#06b6d4",
-};
-const FALLBACK_COLORS = [
-  "#3b82f6",
-  "#8b5cf6",
-  "#ec4899",
-  "#f59e0b",
-  "#10b981",
-  "#6366f1",
-  "#14b8a6",
-  "#f97316",
-  "#ef4444",
-  "#84cc16",
-];
 
 interface CostByProviderProps {
   data: ProviderSummary[];
@@ -115,6 +94,32 @@ export default function CostByProvider({
             title="No cost data yet"
             description="No provider cost data available for the selected period."
           />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (visibleData.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Cost by Provider</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <EmptyState
+            title="All providers hidden"
+            description="Re-enable at least one provider to view the chart."
+          />
+          <div className="flex justify-center">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setHiddenProviders(new Set())}
+            >
+              Reset hidden providers
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );

@@ -222,8 +222,14 @@ export class ProxyServer {
         }
       }
 
-      // Extract model from request body for per-model tracking
-      const model = (parsedBody?.model ?? parsedBody?.modelId ?? "") as string;
+      const providerImpl = providerRegistry.get(provider) ?? this.unknownProvider;
+      const model =
+        providerImpl.extractModel(parsedBody, targetPath) ||
+        (typeof parsedBody?.model === "string"
+          ? parsedBody.model
+          : typeof parsedBody?.modelId === "string"
+            ? parsedBody.modelId
+            : "");
 
       // Build sanitized headers for event emission (NEVER emit raw headers)
       const incomingHeaders = this.headersToRecord(req.headers);

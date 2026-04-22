@@ -234,7 +234,11 @@ export class TokenExtractor {
   private extractLastUsageEvent(chunks: string[]): unknown {
     for (let index = chunks.length - 1; index >= 0; index -= 1) {
       try {
-        const parsed = JSON.parse(chunks[index]);
+        const chunk = chunks[index];
+        const candidate = chunk.startsWith("data: ")
+          ? chunk.slice("data: ".length)
+          : chunk;
+        const parsed = JSON.parse(candidate);
         if (isRecord(parsed) && parsed.usage) {
           return parsed;
         }
@@ -256,7 +260,7 @@ export class TokenExtractor {
       if (trimmed.startsWith("data:")) {
         const payload = trimmed.slice(5).trim();
         if (!payload || payload === "[DONE]") continue;
-        chunks.push(payload);
+        chunks.push(`data: ${payload}`);
         continue;
       }
 

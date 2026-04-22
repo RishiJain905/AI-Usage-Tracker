@@ -144,7 +144,7 @@ export class UnknownProvider implements Provider {
     return null;
   }
 
-  extractModel(requestBody: any): string {
+  extractModel(requestBody: any, _requestPath?: string): string {
     return requestBody?.model ?? requestBody?.modelId ?? "";
   }
 
