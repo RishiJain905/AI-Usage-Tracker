@@ -13,6 +13,9 @@ export default defineConfig({
         "@": resolve("src/renderer/src"),
       },
     },
+    define: {
+      __BUILD_TIMESTAMP__: JSON.stringify(process.env.BUILD_TIMESTAMP || new Date().toISOString()),
+    },
     plugins: [react(), tailwindcss()],
   },
 });

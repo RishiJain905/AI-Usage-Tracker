@@ -330,7 +330,8 @@ export default function PricingEditor({
           </p>
         )}
 
-        <Table>
+        <div className="overflow-x-auto">
+          <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Provider</TableHead>
@@ -425,6 +426,7 @@ export default function PricingEditor({
             )}
           </TableBody>
         </Table>
+        </div>
       </CardContent>
     </Card>
   );

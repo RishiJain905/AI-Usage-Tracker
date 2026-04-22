@@ -1,3 +1,5 @@
+> **Note:** Tasks 14 and 15 represent the final QA, release, and polish phase. See `docs/T14-Done.md` and `docs/T15-Done.md` for completion details.
+
 # Task 13: Packaging, Build & Distribution — DONE
 
 ## Summary
@@ -12,7 +14,7 @@ All 11 sub-features for packaging, build, and distribution have been implemented
 | `scripts/notarize.js` | macOS notarization hook using `@electron/notarize` (skips when `CSC_LINK` not set) |
 | `.github/workflows/build.yml` | GitHub Actions CI/CD — matrix build for Windows, macOS, Linux on `v*` tags |
 | `scripts/generate-icons.js` | Icon generation script using `png2icons` to create .ico/.icns from source PNG |
-| `scripts/create-placeholder-icon.js` | Generates a programmatic placeholder 512x512 PNG icon for dev builds |
+| `scripts/generate-source-icon.js` | Generates the refined programmatic 512x512 PNG icon source for builds |
 | `src/main/updater.ts` | Auto-updater module wrapping `electron-updater` with event forwarding to renderer |
 
 ### Icon Assets

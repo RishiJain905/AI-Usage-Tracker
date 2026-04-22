@@ -43,13 +43,13 @@ export default function BudgetTracker({
   let statusColor: string;
   if (budgetStatus === "over") {
     statusText = "Over budget";
-    statusColor = "text-red-500";
+    statusColor = "text-red-600 dark:text-red-400";
   } else if (budgetStatus === "under") {
     statusText = "Under budget";
-    statusColor = "text-emerald-500";
+    statusColor = "text-emerald-600 dark:text-emerald-400";
   } else {
     statusText = "On track";
-    statusColor = "text-yellow-500";
+    statusColor = "text-amber-700 dark:text-amber-400";
   }
 
   return (

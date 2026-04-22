@@ -9,6 +9,7 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
+  X,
 } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { useUsageStore } from "@/stores/usageStore";
@@ -404,7 +405,18 @@ export default function UsageHistory(): React.JSX.Element {
             ) : (
               <AlertCircle className="size-4" />
             )}
-            <span>{exportMessage}</span>
+            <span className="flex-1">{exportMessage}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setExportMessage(null);
+                setExportTone(null);
+              }}
+              className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              aria-label="Dismiss export message"
+            >
+              <X className="size-4" />
+            </button>
           </div>
         )}
         <EmptyState

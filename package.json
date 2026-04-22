@@ -5,6 +5,10 @@
   "main": "./out/main/index.js",
   "author": "TerraWatch",
   "homepage": "https://electron-vite.org",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",

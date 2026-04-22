@@ -202,7 +202,7 @@ export default function DetailModal({
               </div>
 
               {/* Stats */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="rounded-lg border p-3 text-center">
                   <p className="text-xs text-muted-foreground">Tokens</p>
                   <p className="text-sm font-bold tabular-nums">
@@ -329,7 +329,7 @@ export default function DetailModal({
               </div>
 
               {/* Stats */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border p-3 text-center">
                   <p className="text-xs text-muted-foreground">Total Tokens</p>
                   <p className="text-sm font-bold tabular-nums">

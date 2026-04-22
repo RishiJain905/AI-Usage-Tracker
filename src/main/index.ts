@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, globalShortcut } from "electron";
+import { app, shell, BrowserWindow, globalShortcut, session } from "electron";
 import { join } from "node:path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { format, startOfWeek } from "date-fns";
@@ -97,6 +97,7 @@ let db: Database.Database | null = null;
 let mainWindow: BrowserWindow | null = null;
 let trayController: TrayController | null = null;
 let trayRefreshTimer: NodeJS.Timeout | null = null;
+let dailyCleanupTimer: NodeJS.Timeout | null = null;
 let proxyEventCleanup: (() => void) | null = null;
 let runtimeSnapshot: RuntimeSettingsSnapshot | null = null;
 let runtimeBridge: RuntimeSettingsBridge | null = null;
@@ -276,6 +277,8 @@ function createWindow(showOnReady = true): BrowserWindow {
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       sandbox: false,
+      nodeIntegration: false,
+      contextIsolation: true,
     },
   });
 
@@ -554,6 +557,15 @@ function clearTrayRefreshTimer(): void {
   trayRefreshTimer = null;
 }
 
+function clearDailyCleanupTimer(): void {
+  if (!dailyCleanupTimer) {
+    return;
+  }
+
+  clearInterval(dailyCleanupTimer);
+  dailyCleanupTimer = null;
+}
+
 function startTrayRefreshTimer(): void {
   clearTrayRefreshTimer();
   trayRefreshTimer = setInterval(() => {
@@ -566,14 +578,7 @@ function hasAnyRequestsForDate(dateStr: string): boolean {
     return false;
   }
 
-  return (
-    repository.getUsageLogs({
-      startDate: dateStr,
-      endDate: dateStr,
-      limit: 1,
-      offset: 0,
-    }).length > 0
-  );
+  return repository.getAggregateDailyTotal(dateStr).request_count > 0;
 }
 
 function maybeNotifyBudgetThreshold(now: Date): void {
@@ -792,6 +797,7 @@ async function requestAppQuit(): Promise<void> {
 
   quitRequested = true;
   clearTrayRefreshTimer();
+  clearDailyCleanupTimer();
   globalShortcut.unregisterAll();
 
   if (proxyEventCleanup) {
@@ -916,6 +922,22 @@ async function initializeApp(): Promise<void> {
 
   registerAllProviders();
 
+  // Configure Content-Security-Policy response headers before window creation
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        "Content-Security-Policy": [
+          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';",
+        ],
+      },
+    });
+  });
+
+  const autoLaunchEnabled = syncAutoLaunchFromEnv();
+  createWindow(!autoLaunchEnabled);
+  setUpdaterWindow(mainWindow);
+
   const shouldAutoStart =
     runtimeSnapshot.proxy.enabled && runtimeSnapshot.proxy.autoStart;
   let startedProxy: ProxyServer | null = null;
@@ -973,7 +995,7 @@ async function initializeApp(): Promise<void> {
   startTrayRefreshTimer();
 
   // Schedule daily cleanup (runs every 24 hours if auto-cleanup is enabled)
-  setInterval(
+  dailyCleanupTimer = setInterval(
     () => {
       if (repository && shouldRunCleanup(repository)) {
         try {
@@ -993,10 +1015,6 @@ async function initializeApp(): Promise<void> {
   );
 
   attachProxyEventListeners(tokenExtractor, costCalculator);
-
-  const autoLaunchEnabled = syncAutoLaunchFromEnv();
-  createWindow(!autoLaunchEnabled);
-  setUpdaterWindow(mainWindow);
 
   registerGlobalShortcuts();
 

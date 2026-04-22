@@ -285,7 +285,8 @@ export default function ByProvider(): React.JSX.Element {
               <CardTitle>Provider Summary</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
+              <div className="overflow-x-auto">
+                <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Provider</TableHead>
@@ -334,7 +335,8 @@ export default function ByProvider(): React.JSX.Element {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </>

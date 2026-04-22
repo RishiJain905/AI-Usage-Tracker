@@ -26,7 +26,7 @@ Replace with professionally designed icons:
    npm run generate-icons
    ```
 
-4. Remove the `scripts/create-placeholder-icon.js` script (or keep for emergencies).
+4. Remove the `scripts/create-placeholder-icon.js` script (or keep for emergencies; renamed to `scripts/generate-source-icon.js`).
 
 ### 15.2 Update Settings > About page
 

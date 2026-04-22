@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FolderOpen, RefreshCcw, Download, RotateCcw } from "lucide-react";
+import { FolderOpen, RefreshCcw, Download, RotateCcw, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+
+declare const __BUILD_TIMESTAMP__: string;
 
 interface AboutMetadata {
   appVersion: string;
@@ -83,6 +85,8 @@ export default function About(): React.JSX.Element {
       { label: "Electron", value: runtime.electron ?? "Unknown" },
       { label: "Node.js", value: runtime.node ?? "Unknown" },
       { label: "Chrome", value: runtime.chrome ?? "Unknown" },
+      { label: "V8", value: runtime.v8 ?? "Unknown" },
+      { label: "Build timestamp", value: __BUILD_TIMESTAMP__ },
       { label: "Database path", value: meta.databasePath },
       { label: "Database size", value: formatBytes(meta.databaseSizeBytes) },
       { label: "License", value: meta.license },
@@ -341,14 +345,30 @@ export default function About(): React.JSX.Element {
 
       <CardContent className="space-y-4">
         {error && (
-          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
-          </p>
+          <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <span className="flex-1">{error}</span>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              aria-label="Dismiss error"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
         )}
         {notice && (
-          <p className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm">
-            {notice}
-          </p>
+          <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm">
+            <span className="flex-1">{notice}</span>
+            <button
+              type="button"
+              onClick={() => setNotice(null)}
+              className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              aria-label="Dismiss notice"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
         )}
 
         {renderUpdaterStatus()}

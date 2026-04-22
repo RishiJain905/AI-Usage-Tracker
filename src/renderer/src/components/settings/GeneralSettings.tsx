@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, X } from "lucide-react";
 import {
   BUDGET_ALERT_MAX,
   BUDGET_ALERT_MIN,
@@ -338,7 +338,15 @@ export default function GeneralSettings(): React.JSX.Element {
           ) : (
             <AlertCircle className="size-4" />
           )}
-          <span>{feedback.message}</span>
+          <span className="flex-1">{feedback.message}</span>
+          <button
+            type="button"
+            onClick={() => setFeedback(null)}
+            className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            aria-label="Dismiss feedback"
+          >
+            <X className="size-4" />
+          </button>
         </div>
       )}
 

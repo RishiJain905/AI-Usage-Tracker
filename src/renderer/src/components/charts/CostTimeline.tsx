@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -150,7 +150,7 @@ export default function CostTimeline({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between space-y-0">
         <CardTitle>Cost Over Time</CardTitle>
         <div className="flex gap-1">
           <Button
@@ -185,7 +185,7 @@ function AggregateCostChart({
 }: {
   data: DailyTrend[];
 }): React.JSX.Element {
-  const chartData = deriveCostData(data);
+  const chartData = useMemo(() => deriveCostData(data), [data]);
 
   return (
     <ResponsiveContainer width="100%" height={300}>
@@ -266,26 +266,27 @@ function PerModelCostChart({
     );
   }
 
-  const modelKeys = Object.keys(modelTrends);
-
   // Merge per-model trends into a single dataset keyed by date
-  const dateMap = new Map<string, Record<string, number>>();
+  const modelKeys = Object.keys(modelTrends);
+  const mergedData = useMemo(() => {
+    const dateMap = new Map<string, Record<string, number>>();
 
-  for (const modelKey of modelKeys) {
-    const trends = modelTrends[modelKey];
-    for (const entry of trends) {
-      if (!dateMap.has(entry.date)) {
-        dateMap.set(entry.date, {});
+    for (const modelKey of modelKeys) {
+      const trends = modelTrends[modelKey];
+      for (const entry of trends) {
+        if (!dateMap.has(entry.date)) {
+          dateMap.set(entry.date, {});
+        }
+        const record = dateMap.get(entry.date)!;
+        record[modelKey] = (record[modelKey] ?? 0) + entry.total_cost;
       }
-      const record = dateMap.get(entry.date)!;
-      record[modelKey] = (record[modelKey] ?? 0) + entry.total_cost;
     }
-  }
 
-  // Sort by date
-  const mergedData = Array.from(dateMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, values]) => ({ date, ...values }));
+    // Sort by date
+    return Array.from(dateMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, values]) => ({ date, ...values }));
+  }, [modelTrends]);
 
   /** Resolve color for a model key using its provider prefix */
   function resolveColor(key: string, index: number): string {

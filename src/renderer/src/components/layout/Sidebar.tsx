@@ -107,6 +107,7 @@ function SidebarCollapseToggle(): React.JSX.Element {
       className="w-full justify-center"
       onClick={toggleSidebar}
       title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+      aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
     >
       {isCollapsed ? (
         <PanelLeft className="size-4" />

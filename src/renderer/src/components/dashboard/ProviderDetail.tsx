@@ -105,7 +105,7 @@ export default function ProviderDetailPanel({
   return (
     <Card className="border-primary/30">
       <CardHeader className="flex flex-row items-center gap-3 space-y-0">
-        <Button variant="ghost" size="icon-sm" onClick={onClose}>
+        <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Go back">
           <ArrowLeft className="size-4" />
         </Button>
         <div className="flex-1">
@@ -117,7 +117,7 @@ export default function ProviderDetailPanel({
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Aggregate stats */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-lg border p-3 text-center">
             <p className="text-xs text-muted-foreground">Total Tokens</p>
             <p className="text-lg font-bold tabular-nums">
@@ -141,7 +141,7 @@ export default function ProviderDetailPanel({
         </div>
 
         {/* Average latency and error rate */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="rounded-lg border p-3">
             <p className="text-xs text-muted-foreground">Avg. Latency</p>
             <p className="text-sm font-semibold">

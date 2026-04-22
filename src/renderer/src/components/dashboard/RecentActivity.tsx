@@ -70,7 +70,7 @@ export default function RecentActivity({
         <CardTitle>Recent Activity</CardTitle>
       </CardHeader>
       <CardContent>
-        <div ref={scrollRef} className="max-h-[400px] overflow-y-auto">
+        <div ref={scrollRef} className="max-h-[400px] overflow-auto">
           <Table>
             <TableHeader>
               <TableRow>

@@ -140,7 +140,7 @@ export default function ModelComparison({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between space-y-0">
         <CardTitle>Model Comparison</CardTitle>
         {/* Provider filter */}
         <Select
@@ -161,7 +161,8 @@ export default function ModelComparison({
         </Select>
       </CardHeader>
       <CardContent>
-        <Table>
+        <div className="overflow-x-auto">
+          <Table>
           <TableHeader>
             <TableRow>
               {COLUMNS.map((col) => (
@@ -242,6 +243,7 @@ export default function ModelComparison({
             ))}
           </TableBody>
         </Table>
+        </div>
 
         {/* Pagination */}
         {totalPages > 1 && (
