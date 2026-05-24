@@ -183,24 +183,15 @@ function PerModelChart({
 }: {
   modelTrends?: ModelDailyTrends;
 }): React.JSX.Element {
-  if (!modelTrends || Object.keys(modelTrends).length === 0) {
-    return (
-      <div className="flex h-[300px] items-center justify-center">
-        <EmptyState
-          title="Per-model data not available"
-          description="Per-model daily trend data is not available for this view."
-        />
-      </div>
-    );
-  }
-
   // Merge per-model trends into a single dataset keyed by date
-  const modelKeys = Object.keys(modelTrends);
+  const modelKeys = Object.keys(modelTrends ?? {});
   const mergedData = useMemo(() => {
+    if (modelKeys.length === 0) return [];
+    const modelTrendsNonNull = modelTrends!;
     const dateMap = new Map<string, Record<string, number>>();
 
     for (const modelKey of modelKeys) {
-      const trends = modelTrends[modelKey];
+      const trends = modelTrendsNonNull[modelKey];
       for (const entry of trends) {
         if (!dateMap.has(entry.date)) {
           dateMap.set(entry.date, {});
@@ -215,6 +206,17 @@ function PerModelChart({
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, values]) => ({ date, ...values }));
   }, [modelTrends]);
+
+  if (modelKeys.length === 0) {
+    return (
+      <div className="flex h-[300px] items-center justify-center">
+        <EmptyState
+          title="Per-model data not available"
+          description="Per-model daily trend data is not available for this view."
+        />
+      </div>
+    );
+  }
 
   // Derive a short model name from the key (use last segment after / or .)
   function shortName(key: string): string {

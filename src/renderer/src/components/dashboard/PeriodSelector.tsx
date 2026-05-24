@@ -1,12 +1,14 @@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Period } from "@/types/usage";
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const PERIOD_LABELS: Record<Period, string> = {
   today: "Today",
   week: "This Week",
   month: "This Month",
   all: "All Time",
 };
+
 
 interface PeriodSelectorProps {
   period: Period;

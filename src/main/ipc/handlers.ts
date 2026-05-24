@@ -991,6 +991,7 @@ export function registerProxyIpcHandlers(
     (_event, options: import("../export/csv").CsvExportOptions) => {
       if (!repository) return "";
       const { exportToCsv } =
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require("../export/csv") as typeof import("../export/csv");
       return exportToCsv(repository, options);
     },
@@ -1001,6 +1002,7 @@ export function registerProxyIpcHandlers(
     (_event, options: import("../export/json").JsonExportOptions) => {
       if (!repository) return "{}";
       const { exportToJson } =
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require("../export/json") as typeof import("../export/json");
       return exportToJson(repository, options);
     },
@@ -1011,6 +1013,7 @@ export function registerProxyIpcHandlers(
     (_event, options: import("../export/report").ReportOptions) => {
       if (!repository) return "";
       const { generateHtmlReport } =
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require("../export/report") as typeof import("../export/report");
       return generateHtmlReport(repository, options);
     },
@@ -1086,11 +1089,13 @@ export function registerProxyIpcHandlers(
 
     try {
       const { getBackupFilePath, rotateBackups, backupDatabase } =
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require("../export/backup") as typeof import("../export/backup");
       const appDataPath = app.getPath("userData");
       const backupPath = getBackupFilePath(appDataPath);
 
       const { getDatabase } =
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require("../database") as typeof import("../database");
       const db = getDatabase();
       await backupDatabase(db, backupPath);
@@ -1111,6 +1116,7 @@ export function registerProxyIpcHandlers(
     "data:restore",
     async (_event, payload: { backupPath: string }) => {
       const { validateBackup } =
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require("../export/restore") as typeof import("../export/restore");
 
       if (!validateBackup(payload.backupPath)) {
@@ -1123,6 +1129,7 @@ export function registerProxyIpcHandlers(
         const dbPath = pathModule.join(appDataPath, "ai-tracker.db");
 
         const { backupDatabase } =
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
           require("../export/backup") as typeof import("../export/backup");
         const fs = await import("fs");
         const preRestoreBackupPath = pathModule.join(
@@ -1137,6 +1144,7 @@ export function registerProxyIpcHandlers(
         }
 
         const { getDatabase } =
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
           require("../database") as typeof import("../database");
         const db = getDatabase();
         await backupDatabase(db, preRestoreBackupPath);
@@ -1166,6 +1174,7 @@ export function registerProxyIpcHandlers(
 
       try {
         const { runCleanup, getRetentionDays } =
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
           require("../database/cleanup") as typeof import("../database/cleanup");
         const retentionDays =
           payload.retentionDays ?? getRetentionDays(repository);
@@ -1194,6 +1203,7 @@ export function registerProxyIpcHandlers(
 
       try {
         const { ZhipuAiSync } =
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
           require("../sync/zhipuai-sync") as typeof import("../sync/zhipuai-sync");
         const syncer = new ZhipuAiSync();
         const since =

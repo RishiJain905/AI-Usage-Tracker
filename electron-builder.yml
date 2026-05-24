@@ -78,5 +78,5 @@ npmRebuild: false
 
 publish:
   provider: github
-  owner: terratch
-  repo: ai-usage-tracker
+  owner: RishiJain905
+  repo: AI-Usage-Tracker

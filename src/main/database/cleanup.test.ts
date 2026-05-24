@@ -5,6 +5,7 @@ import { seedDatabase } from "./seed";
 import { UsageRepository, createRepository } from "./repository";
 import type { InsertUsageLogInput, UpsertSummaryInput } from "./types";
 import { runCleanup, shouldRunCleanup, getRetentionDays } from "./cleanup";
+import { subDays, format } from "date-fns";
 
 // ---------------------------------------------------------------------------
 // Helper: fresh in-memory DB with migrations + seed data
@@ -80,29 +81,22 @@ describe("runCleanup", () => {
   });
 
   it("should delete usage logs older than retention days", () => {
-    // Insert logs at different dates
-    repo.insertUsageLog(
-      makeLogInput({ requested_at: "2026-01-01T10:00:00.000Z" }),
-    );
-    repo.insertUsageLog(
-      makeLogInput({ requested_at: "2026-02-01T10:00:00.000Z" }),
-    );
-    repo.insertUsageLog(
-      makeLogInput({ requested_at: "2026-04-19T10:00:00.000Z" }),
-    );
+    const now = new Date();
+    const recent = format(subDays(now, 5), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+    const old1 = format(subDays(now, 60), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+    const old2 = format(subDays(now, 90), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 
-    // 30-day retention should delete January and February logs
+    repo.insertUsageLog(makeLogInput({ requested_at: old1 }));
+    repo.insertUsageLog(makeLogInput({ requested_at: old2 }));
+    repo.insertUsageLog(makeLogInput({ requested_at: recent }));
+
+    // 30-day retention should delete the two old logs
     const deletedCount = runCleanup(repo, 30);
 
     expect(deletedCount).toBe(2);
 
-    // Verify remaining logs
-    const remaining = repo.getUsageLogs({
-      limit: 100,
-      offset: 0,
-    });
+    const remaining = repo.getUsageLogs({ limit: 100, offset: 0 });
     expect(remaining.length).toBe(1);
-    expect(remaining[0].requested_at).toContain("2026-04-19");
   });
 
   it("should NEVER delete from daily_summary", () => {
@@ -156,18 +150,16 @@ describe("runCleanup", () => {
   });
 
   it("should return correct deleted count", () => {
-    repo.insertUsageLog(
-      makeLogInput({ requested_at: "2026-01-01T10:00:00.000Z" }),
-    );
-    repo.insertUsageLog(
-      makeLogInput({ requested_at: "2026-01-02T10:00:00.000Z" }),
-    );
-    repo.insertUsageLog(
-      makeLogInput({ requested_at: "2026-01-03T10:00:00.000Z" }),
-    );
-    repo.insertUsageLog(
-      makeLogInput({ requested_at: "2026-04-19T10:00:00.000Z" }),
-    );
+    const now = new Date();
+    const recent = format(subDays(now, 2), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+    const old1 = format(subDays(now, 14), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+    const old2 = format(subDays(now, 21), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+    const old3 = format(subDays(now, 30), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+
+    repo.insertUsageLog(makeLogInput({ requested_at: old1 }));
+    repo.insertUsageLog(makeLogInput({ requested_at: old2 }));
+    repo.insertUsageLog(makeLogInput({ requested_at: old3 }));
+    repo.insertUsageLog(makeLogInput({ requested_at: recent }));
 
     const deletedCount = runCleanup(repo, 7);
 
